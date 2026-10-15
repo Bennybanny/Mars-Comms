@@ -5,7 +5,12 @@ import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { Store } from "./store.js";
 import { cookieToken, signaling } from "./signaling.js";
-export function createApp(store: Store, tls?: { cert: string; key: string }) {
+import { setupRoutes, type SetupOptions } from "./setup.js";
+export function createApp(
+  store: Store,
+  tls?: { cert: string; key: string },
+  options: { staticRoot?: string; setup?: SetupOptions } = {},
+) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "128kb" }));
@@ -114,8 +119,11 @@ export function createApp(store: Store, tls?: { cert: string; key: string }) {
       res.json({ ok: true });
     });
   }
-  app.use(express.static(resolve("dist")));
-  app.get("/{*path}", (_req, res) => res.sendFile(resolve("dist/index.html")));
+  if (options.setup) app.use(setupRoutes(options.setup));
+  const staticRoot = resolve(options.staticRoot ?? "dist");
+  app.use(express.static(staticRoot));
+  app.get("/", (_req, res) => res.sendFile(resolve(staticRoot, "index.html")));
+  app.use((_req, res) => res.sendStatus(404));
   app.use(
     (
       err: Error,
@@ -123,13 +131,11 @@ export function createApp(store: Store, tls?: { cert: string; key: string }) {
       res: express.Response,
       _next: express.NextFunction,
     ) =>
-      res
-        .status(400)
-        .json({
-          error: err.message.includes("UNIQUE")
-            ? "Username already exists"
-            : err.message,
-        }),
+      res.status(400).json({
+        error: err.message.includes("UNIQUE")
+          ? "Username already exists"
+          : err.message,
+      }),
   );
   const server = tls
     ? httpsServer(

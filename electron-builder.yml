@@ -1,0 +1,37 @@
+appId: com.marscomms.desktop
+productName: Mars Comms
+artifactName: Mars-Comms-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+  buildResources: build
+files:
+  - desktop-dist/**
+  - dist/**
+  - package.json
+  - "!**/*.map"
+asar: true
+npmRebuild: false
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  signExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Mars Comms
+portable:
+  artifactName: Mars-Comms-${version}-Windows-Portable.${ext}
+mac:
+  icon: build/icon.png
+  category: public.app-category.utilities
+  target: [dmg, zip]
+linux:
+  icon: build/icon.png
+  category: Network
+  target: [AppImage]

@@ -17,3 +17,16 @@ jobs:
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - run: npm run test:desktop
+        if: runner.os != 'Linux'
+      - run: xvfb-run -a npm run test:desktop
+        if: runner.os == 'Linux'
+      - run: npm run package:win
+        if: runner.os == 'Windows'
+      - run: npm run test:packaged
+        if: runner.os == 'Windows'
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: Mars-Comms-Windows
+          path: release/*.exe

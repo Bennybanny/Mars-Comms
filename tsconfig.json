@@ -10,5 +10,14 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["server", "shared", "client", "tests", "vite.config.ts"]
+  "include": [
+    "server",
+    "shared",
+    "client",
+    "tests",
+    "vite.config.ts",
+    "launcher",
+    "desktop",
+    "playwright.desktop.config.ts"
+  ]
 }

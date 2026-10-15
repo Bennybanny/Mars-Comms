@@ -1,0 +1,273 @@
+:root {
+  font:
+    13px -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: #edeaf4;
+  background: #131218;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px 16px;
+  border-bottom: 1px solid #34303f;
+}
+h1 {
+  font-size: 22px;
+  letter-spacing: 2px;
+  margin: 0;
+}
+h1 span {
+  color: #ac83f5;
+}
+header p {
+  margin: 7px 0 0;
+  color: #938c9f;
+  font-size: 12px;
+}
+.version {
+  padding: 6px 9px;
+  border: 1px solid #3d354a;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #aaa0bc;
+}
+main {
+  padding: 0 28px 18px;
+}
+section {
+  padding: 16px 0;
+  border-bottom: 1px solid #302b39;
+}
+h2 {
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  color: #a594bd;
+  margin: 0 0 15px;
+  font-weight: 700;
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+.section-heading h2 {
+  margin-bottom: 0;
+}
+.section-heading {
+  margin-bottom: 13px;
+}
+label {
+  display: block;
+  color: #b5adbf;
+  font-size: 12px;
+  margin: 12px 0 7px;
+}
+input,
+select,
+button {
+  font: inherit;
+  color: #eee9f4;
+  border: 1px solid #443a52;
+  background: #211d29;
+  border-radius: 7px;
+  min-height: 39px;
+  padding: 9px 12px;
+}
+input,
+select {
+  width: 100%;
+}
+button {
+  cursor: pointer;
+  font-weight: 550;
+}
+button:hover {
+  background: #342b42;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #b88aff;
+  outline-offset: 2px;
+}
+button:disabled,
+input:disabled,
+select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ports {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.muted {
+  color: #a298ae;
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 10px 0;
+}
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #a69caf;
+}
+.green {
+  color: #71d4a5;
+}
+.orange,
+.warning {
+  color: #f2ba76;
+}
+.red {
+  color: #ffabb8;
+}
+.buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.buttons button {
+  flex: 1;
+  font-size: 12px;
+}
+.primary {
+  background: #7b50d1;
+  border-color: #9369e2;
+  color: white;
+}
+.primary:hover {
+  background: #8b5fe3;
+}
+.wide {
+  width: 100%;
+  margin-top: 16px;
+  min-height: 45px;
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.stop {
+  background: #35232d;
+  border-color: #885264;
+  color: #ffd5df;
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.row .muted {
+  margin: 0;
+}
+.cert-details {
+  display: grid;
+  grid-template-columns: 105px 1fr;
+  gap: 8px 10px;
+  background: #1b1822;
+  padding: 12px;
+  border-radius: 7px;
+  margin-top: 14px;
+  font-size: 11px;
+}
+.cert-details .muted {
+  margin: 0;
+  font-size: 11px;
+}
+code {
+  display: block;
+  word-break: break-all;
+  font:
+    12px ui-monospace,
+    Consolas,
+    monospace;
+  line-height: 1.7;
+  color: #c5b3e3;
+}
+.address-label {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #8f819f;
+  margin: 17px 0 7px;
+}
+#mdnsUrl {
+  color: #9787ab;
+  font-size: 11px;
+}
+.notice {
+  padding: 12px;
+  border: 1px solid #514165;
+  border-radius: 7px;
+  background: #251d31;
+  line-height: 1.5;
+  margin-top: 15px;
+}
+.error {
+  border-color: #865065;
+  background: #35212c;
+  color: #ffc3d2;
+}
+.warning {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.advanced {
+  margin-top: 18px;
+  color: #9d92ac;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.advanced summary {
+  cursor: pointer;
+}
+.advanced button {
+  font-size: 11px;
+}
+footer {
+  font-size: 10px;
+  color: #756c83;
+  margin-top: 18px;
+  line-height: 1.5;
+}
+dialog {
+  background: #201a2b;
+  color: #eee7f7;
+  border: 1px solid #60506f;
+  border-radius: 12px;
+  max-width: 440px;
+  width: calc(100% - 40px);
+  max-height: 90vh;
+  padding: 24px;
+}
+dialog::backdrop {
+  background: #08050dbb;
+}
+dialog p {
+  line-height: 1.6;
+  font-size: 12px;
+}
+dialog img {
+  display: block;
+  background: white;
+  margin: 20px auto;
+  border-radius: 8px;
+  max-width: 100%;
+  height: auto;
+}
+#fingerprint {
+  font-size: 10px;
+}
+[hidden] {
+  display: none !important;
+}

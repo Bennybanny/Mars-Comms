@@ -6,3 +6,11 @@ certs/
 
 test-results/
 playwright-report/
+desktop-dist/
+desktop-test-results/
+release/
+build/
+*.pem
+*.key
+*.pfx
+*.p12

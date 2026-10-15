@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'"
+    />
+    <title>Mars Comms</title>
+    <link rel="stylesheet" href="launcher.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>MARS <span>COMMS</span></h1>
+        <p>Local Intercom Server</p>
+      </div>
+      <span id="version" class="version"></span>
+    </header>
+    <main>
+      <div id="error" class="notice error" role="alert" hidden></div>
+      <div id="notice" class="notice" hidden></div>
+      <section>
+        <h2>NETWORK</h2>
+        <label for="interface">Network interface</label
+        ><select id="interface"></select>
+        <p id="missing" class="warning" hidden>
+          The saved interface is unavailable. Select your active network before
+          starting.
+        </p>
+        <div class="ports">
+          <div>
+            <label for="port">HTTPS port</label
+            ><input
+              id="port"
+              type="number"
+              min="1024"
+              max="65535"
+              value="8090"
+            />
+          </div>
+          <div>
+            <label for="setupPort">Client setup port · HTTP</label
+            ><input
+              id="setupPort"
+              type="number"
+              min="1024"
+              max="65535"
+              value="8092"
+            />
+          </div>
+        </div>
+      </section>
+      <section>
+        <div class="section-heading">
+          <h2>HTTPS</h2>
+          <span id="certStatus" class="badge">No certificate</span>
+        </div>
+        <p id="certMessage" class="muted">
+          Generate a certificate for this network.
+        </p>
+        <div class="buttons">
+          <button id="generate">Generate Certificate</button
+          ><button id="export" disabled>Export Client CA</button>
+        </div>
+        <div id="certDetails" class="cert-details" hidden>
+          <span class="muted">CA</span><span>Mars Comms Local CA</span
+          ><span class="muted">Certificate covers</span><span id="names"></span
+          ><span class="muted">Expires</span><span id="expiry"></span>
+        </div>
+      </section>
+      <section>
+        <div class="section-heading">
+          <h2>SERVER</h2>
+          <span id="serverStatus" class="badge">● Stopped</span>
+        </div>
+        <div class="row">
+          <span class="muted">mDNS</span><span id="mdns">—</span>
+        </div>
+        <button id="lifecycle" class="primary wide">START SERVER</button>
+        <div id="addresses" hidden>
+          <div class="address-label">INTERCOM · HTTPS</div>
+          <code id="url"></code><code id="mdnsUrl" hidden></code>
+          <div class="buttons">
+            <button id="open" class="primary">Open Mars Comms ↗</button
+            ><button id="showQR">Show Client Setup QR</button>
+          </div>
+        </div>
+      </section>
+      <details class="advanced">
+        <summary>Data &amp; client trust</summary>
+        <p>
+          Trust the public CA once on each device, including this computer. IP
+          changes only require updating the server certificate.
+        </p>
+        <p>
+          CA trust is never installed automatically. Use Export Client CA and
+          the client setup instructions.
+        </p>
+        <button id="import">Import existing database…</button>
+        <p class="muted">Data directory</p>
+        <code id="dataDirectory"></code>
+      </details>
+      <footer>
+        Closing this window stops the server and all crew connections.
+      </footer>
+    </main>
+    <dialog id="qrDialog">
+      <div class="section-heading">
+        <h2>CLIENT SETUP</h2>
+        <button id="closeQR" aria-label="Close client setup">✕</button>
+      </div>
+      <p>
+        Scan on your crew device, download the CA and follow the setup
+        instructions.
+      </p>
+      <img
+        id="qr"
+        alt="QR code linking to Mars Comms client setup"
+        width="280"
+        height="280"
+      /><code id="setupUrl"></code>
+      <p class="muted">
+        Verify the downloaded certificate's SHA-256 fingerprint before trusting
+        it. Text on the HTTP setup page alone is not proof:
+      </p>
+      <code id="fingerprint"></code>
+      <p class="muted">
+        The setup port serves public certificate instructions only. Login and
+        audio use HTTPS.
+      </p>
+    </dialog>
+    <script src="renderer.js"></script>
+  </body>
+</html>

@@ -95,7 +95,11 @@ export function signaling(server: Server, store: Store) {
             if (changed) broadcast();
           } else {
             const target = peers.get(m.to);
-            if (target && relevant(entry.peer, target.peer))
+            if (
+              target &&
+              target.ws.readyState === WebSocket.OPEN &&
+              relevant(entry.peer, target.peer)
+            )
               target.ws.send(JSON.stringify({ ...m, from: id, to: undefined }));
           }
         } catch {
@@ -112,6 +116,13 @@ export function signaling(server: Server, store: Store) {
   function broadcast() {
     if (shuttingDown) return;
     for (const e of peers.values()) {
+      // A client can reconnect before the old socket's close event runs.
+      // Do not carry a closing socket or its latched talk into that snapshot.
+      if (e.ws.readyState !== WebSocket.OPEN) {
+        e.peer.talk = [];
+        peers.delete(e.peer.id);
+        continue;
+      }
       const user = store.session(e.token);
       if (!user) {
         e.ws.close(1008);
@@ -167,8 +178,21 @@ export function signaling(server: Server, store: Store) {
     close() {
       shuttingDown = true;
       clearInterval(timer);
-      for (const e of peers.values()) e.ws.terminate();
-      wss.close();
+      for (const e of peers.values()) {
+        e.peer.talk = [];
+      }
+      for (const ws of wss.clients)
+        ws.close(1001, "Mars Comms server stopping");
+      return new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          for (const ws of wss.clients) ws.terminate();
+        }, 800);
+        wss.close(() => {
+          clearTimeout(timeout);
+          peers.clear();
+          resolve();
+        });
+      });
     },
   };
 }
