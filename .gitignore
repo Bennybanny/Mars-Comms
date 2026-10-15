@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/
+certs/
+*.log
+
+test-results/
+playwright-report/
