@@ -6,8 +6,8 @@ Local browser intercom for small live production crews, with a native desktop la
 
 Install **Mars Comms** on the server computer. On Windows x64, run the installer or open the portable EXE. **No separate Node.js installation, terminal, browser launcher or Git checkout is required.**
 
-- `release/Mars-Comms-0.2.1-win-x64.exe` — installer with desktop/Start menu shortcuts.
-- `release/Mars-Comms-0.2.1-Windows-Portable.exe` — standalone launcher without installation.
+- `release/Mars-Comms-0.2.2-win-x64.exe` — installer with desktop/Start menu shortcuts.
+- `release/Mars-Comms-0.2.2-Windows-Portable.exe` — standalone launcher without installation.
 
 The portable app still stores persistent data in your user application-data folder, not beside the EXE. Windows binaries are currently unsigned. macOS `.app`/DMG and Linux AppImage packaging are configured for builds on those operating systems; local verification was performed on Windows.
 
@@ -103,6 +103,7 @@ npm run test:browser      # original intercom/WebRTC tests, synthetic microphone
 npm run test:desktop      # actual Electron window and lifecycle
 npm run package:win       # x64 installer + portable EXE in release/
 npm run test:packaged     # tests release/win-unpacked/Mars Comms.exe
+npm run test:portable     # Windows: opens/closes/reopens the actual portable EXE
 ```
 
 Install test Chromium once: `npx playwright install chromium`. Linux CI runs Electron tests with `xvfb-run -a`. `npm run package:mac` and `npm run package:linux` target their respective OS build machines; `npm run package:dir` produces an unpacked application. Packaging never publishes releases automatically. GitHub Actions verifies all three OSes and builds/uploads Windows artifacts; a configured workflow is not evidence every remote run has passed.

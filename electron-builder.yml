@@ -26,6 +26,7 @@ nsis:
   createDesktopShortcut: true
   shortcutName: Mars Comms
 portable:
+  unpackDirName: false
   artifactName: Mars-Comms-${version}-Windows-Portable.${ext}
 mac:
   icon: build/icon.png

@@ -8,6 +8,7 @@ test-results/
 playwright-report/
 desktop-dist/
 desktop-test-results/
+portable-test-results/
 release/
 build/
 *.pem

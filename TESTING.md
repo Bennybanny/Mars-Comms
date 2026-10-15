@@ -1,5 +1,7 @@
 # Verification record
 
+Version 0.2.2 addresses a portable-only shutdown hang reproduced by starting the actual self-extracting EXE normally and sending Windows' native window-close signal. The old build removed its window but left the main process/wrapper alive, blocking later launches. The new Windows `test:portable` smoke test deliberately uses no debugger: it checks a visible native window, clean app/wrapper exit on close and a complete subsequent launch/close. Separate extraction folders prevent repeated portable launches from interfering with the existing process's files. Normal shutdown stops services first, then explicitly exits the Electron GUI process; an eight-second failure deadline prevents an indefinite orphan. Launcher diagnostics are saved to `logs/launcher.log` inside the application-data directory.
+
 Version 0.2.1 fixes a blank intercom page caused by setup-route CSP middleware overriding the React page/asset policy. The new packaged regression test first reproduced the failure in 0.2.0, then verifies the actual HTTPS login page, loaded dark stylesheet, browser login, intercom rendering and WebSocket connection. Service tests independently check that HTML/JS/CSS retain the application policy while HTTPS/HTTP setup endpoints retain their stricter policy. The earlier 0.2.0 native test exercised the login API and browser-open URL but did not render the intercom page; this gap is now covered.
 
 Verified locally on Windows with Node.js 24.19.0, Chromium 156 (Playwright), Electron 44.7.2 and electron-builder 26.15.3.

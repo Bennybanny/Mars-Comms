@@ -8,6 +8,7 @@ import {
 } from "electron";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { mkdirSync, appendFileSync } from "node:fs";
 import QRCode from "qrcode";
 import { LauncherController } from "../launcher/controller.js";
 import type { LauncherConfig } from "../shared/launcher.js";
@@ -22,10 +23,22 @@ const dataDirectory = resolveDataDirectory({
   testOverride: process.env.MARS_COMMS_TEST_DATA_DIR,
 });
 app.setPath("userData", dataDirectory);
+function log(message: string) {
+  try {
+    mkdirSync(join(dataDirectory, "logs"), { recursive: true, mode: 0o700 });
+    appendFileSync(
+      join(dataDirectory, "logs", "launcher.log"),
+      `${new Date().toISOString()} [${process.pid}] ${message}\n`,
+      { mode: 0o600 },
+    );
+  } catch {}
+}
+log(`Starting Mars Comms ${app.getVersion()}`);
 let window: BrowserWindow | undefined;
 let controller: LauncherController | undefined;
 let quitting = false;
 let closing = false;
+let creatingWindow: Promise<void> | undefined;
 const entry = join(__dirname, "index.html");
 const ownURL = pathToFileURL(entry).href;
 function authorize(event: IpcMainInvokeEvent) {
@@ -63,15 +76,6 @@ async function createWindow() {
     },
   });
   window.removeMenu();
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  window.webContents.on("will-navigate", (event, url) => {
-    if (url !== ownURL) event.preventDefault();
-  });
-  window.webContents.session.setPermissionRequestHandler(
-    (_webContents, _permission, callback) => callback(false),
-  );
-  await window.loadFile(entry);
-  window.show();
   window.on("close", (event) => {
     if (!quitting) {
       event.preventDefault();
@@ -81,30 +85,74 @@ async function createWindow() {
   window.on("closed", () => {
     window = undefined;
   });
+  window.webContents.on("render-process-gone", (_event, details) =>
+    log(`Launcher renderer stopped: ${details.reason} (${details.exitCode})`),
+  );
+  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.on("will-navigate", (event, url) => {
+    if (url !== ownURL) event.preventDefault();
+  });
+  window.webContents.session.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false),
+  );
+  await window.loadFile(entry);
+  window.show();
+  log("Launcher window ready");
+}
+async function showLauncher() {
+  if (closing) return;
+  if (creatingWindow) await creatingWindow;
+  if (!window || window.isDestroyed()) {
+    if (!controller) return;
+    creatingWindow = createWindow().finally(() => {
+      creatingWindow = undefined;
+    });
+    await creatingWindow;
+  }
+  if (window?.isMinimized()) window.restore();
+  window?.show();
+  window?.focus();
 }
 async function shutdown() {
   if (closing) return;
   closing = true;
+  log(`Shutdown requested; server ${controller?.state ?? "not initialized"}`);
+  const deadline = setTimeout(() => {
+    log("Shutdown deadline reached; terminating application");
+    app.exit(1);
+  }, 8000);
+  deadline.unref();
   try {
     await controller?.dispose();
     quitting = true;
-    app.quit();
+    clearTimeout(deadline);
+    log("Shutdown complete");
+    // All application services are already closed. Exit the GUI process
+    // explicitly so a portable wrapper cannot be left waiting on Chromium.
+    app.exit(0);
   } catch (error) {
+    clearTimeout(deadline);
     closing = false;
-    await dialog.showMessageBox(window!, {
+    log("Shutdown postponed: " + (error as Error).message);
+    const options: Electron.MessageBoxOptions = {
       type: "info",
       message: (error as Error).message,
       buttons: ["OK"],
-    });
+    };
+    if (window && !window.isDestroyed())
+      await dialog.showMessageBox(window, options);
+    else await dialog.showMessageBox(options);
   }
 }
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  log("Existing instance notified");
+  app.exit(0);
 } else {
   app.on("second-instance", () => {
-    if (window?.isMinimized()) window.restore();
-    window?.show();
-    window?.focus();
+    log("Show existing launcher requested");
+    void showLauncher().catch((error) =>
+      log("Could not restore launcher: " + String(error)),
+    );
   });
   app
     .whenReady()
@@ -167,9 +215,10 @@ if (!app.requestSingleInstanceLock()) {
         await controller!.importDatabase(result.filePaths[0]);
         return true;
       });
-      await createWindow();
+      await showLauncher();
     })
-    .catch(async () => {
+    .catch(async (error) => {
+      log("Startup failed: " + String(error));
       await dialog.showMessageBox({
         type: "error",
         title: "Mars Comms",
@@ -177,7 +226,7 @@ if (!app.requestSingleInstanceLock()) {
           "Mars Comms could not open its application data or launcher. Check folder permissions and restart.",
       });
       quitting = true;
-      app.quit();
+      app.exit(1);
     });
   app.on("before-quit", (event) => {
     if (!quitting) {
@@ -189,6 +238,8 @@ if (!app.requestSingleInstanceLock()) {
     if (!quitting) void shutdown();
   });
   app.on("activate", () => {
-    window?.show();
+    void showLauncher().catch((error) =>
+      log("Could not restore launcher: " + String(error)),
+    );
   });
 }
