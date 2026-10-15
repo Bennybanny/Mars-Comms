@@ -8,6 +8,8 @@ See [TESTING.md](TESTING.md) for the recorded checks and remaining physical-devi
 
 ## Install and start (Windows, macOS, Linux)
 
+On Windows, double-click **Start Mars Comms.bat**. It checks Node.js 24+, installs dependencies if missing, builds the frontend and opens the launcher in your browser. Keep its terminal window open while using Mars Comms. If the launcher is already running, the batch file opens it without starting another instance.
+
 Install **Node.js 24 LTS** and run from this repository in PowerShell, Terminal or your Linux shell:
 
 ```sh
