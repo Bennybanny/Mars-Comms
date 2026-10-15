@@ -36,7 +36,9 @@ async function launch(dataDirectory: string) {
   });
 }
 
-test("native launcher generates certificates, exports only public CA, runs HTTPS/setup, shows QR and stops on close", async () => {
+test("native launcher generates certificates, exports only public CA, runs HTTPS/setup, shows QR and stops on close", async ({
+  browser,
+}) => {
   const directory = mkdtempSync(join(tmpdir(), "mars-native-"));
   let app: ElectronApplication | undefined;
   const port = await freePort(),
@@ -125,6 +127,41 @@ test("native launcher generates certificates, exports only public CA, runs HTTPS
     );
     expect(login.status).toBe(200);
     expect(JSON.parse(login.body).username).toBe("admin");
+    // Exercise the actual browser frontend served by the packaged application,
+    // not just its login API. The Node request above validates the certificate
+    // chain; this isolated browser context does not alter the OS trust store.
+    const client = await browser.newContext({ ignoreHTTPSErrors: true });
+    try {
+      const intercom = await client.newPage();
+      const clientErrors: string[] = [];
+      intercom.on("pageerror", (error) => clientErrors.push(error.message));
+      intercom.on("console", (message) => {
+        if (
+          /content security policy|refused to load|violates.*policy/i.test(
+            message.text(),
+          )
+        )
+          clientErrors.push(message.text());
+      });
+      await intercom.goto(`https://127.0.0.1:${port}`);
+      await expect(
+        intercom.getByRole("heading", { name: "Join the conversation." }),
+      ).toBeVisible();
+      await expect(intercom.locator("html")).toHaveCSS(
+        "background-color",
+        "rgb(17, 17, 22)",
+      );
+      await intercom.getByLabel("Username", { exact: true }).fill("admin");
+      await intercom.getByLabel("Password", { exact: true }).fill("admin");
+      await intercom.getByRole("button", { name: "Sign in" }).click();
+      await expect(
+        intercom.getByRole("heading", { name: "Your comms. Ready on cue." }),
+      ).toBeVisible();
+      await expect(intercom.locator(".connection")).toContainText("CONNECTED");
+      expect(clientErrors).toEqual([]);
+    } finally {
+      await client.close();
+    }
     const publicDownload = await fetch(
       `http://127.0.0.1:${setupPort}/certificate`,
     );

@@ -63,36 +63,42 @@ async function freePort() {
   return port;
 }
 function https(url: string, ca: string, body?: unknown) {
-  return new Promise<{ status: number; body: string; cookie: string }>(
-    (resolve, reject) => {
-      const req = httpsRequest(
-        url,
-        {
-          ca,
-          method: body ? "POST" : "GET",
-          headers: body
-            ? {
-                "Content-Type": "application/json",
-                Origin: new URL(url).origin,
-              }
-            : {},
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", () =>
-            resolve({
-              status: res.statusCode!,
-              body: data,
-              cookie: res.headers["set-cookie"]?.[0]?.split(";")[0] ?? "",
-            }),
-          );
-        },
-      );
-      req.on("error", reject);
-      req.end(body ? JSON.stringify(body) : undefined);
-    },
-  );
+  return new Promise<{
+    status: number;
+    body: string;
+    cookie: string;
+    csp: string;
+    contentType: string;
+  }>((resolve, reject) => {
+    const req = httpsRequest(
+      url,
+      {
+        ca,
+        method: body ? "POST" : "GET",
+        headers: body
+          ? {
+              "Content-Type": "application/json",
+              Origin: new URL(url).origin,
+            }
+          : {},
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode!,
+            body: data,
+            cookie: res.headers["set-cookie"]?.[0]?.split(";")[0] ?? "",
+            csp: String(res.headers["content-security-policy"] ?? ""),
+            contentType: String(res.headers["content-type"] ?? ""),
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.end(body ? JSON.stringify(body) : undefined);
+  });
 }
 test("NIC enumeration filters unsuitable IPv4 interfaces and retains explicit localhost", () => {
   const entry = (address: string, internal = false, family = "IPv4") =>
@@ -261,6 +267,32 @@ test("real HTTPS lifecycle, setup allowlist, no key download, duplicate start, g
       rootFingerprint = c.snapshot().certificate.fingerprint,
       base = `https://127.0.0.1:${port}`,
       bootstrap = `http://127.0.0.1:${setupPort}`;
+    const frontend = await https(base + "/", ca);
+    assert.equal(frontend.status, 200);
+    assert.match(frontend.csp, /script-src 'self'/);
+    assert.doesNotMatch(frontend.csp, /default-src 'none'/);
+    const assets = [
+      ...frontend.body.matchAll(/(?:src|href)="([^\"]+\.(?:js|css))"/g),
+    ].map((match) => match[1]);
+    assert(assets.some((path) => path.endsWith(".js")));
+    assert(assets.some((path) => path.endsWith(".css")));
+    for (const asset of assets) {
+      const response = await https(base + asset, ca);
+      assert.equal(response.status, 200);
+      assert.match(response.csp, /script-src 'self'/);
+      assert.match(
+        response.contentType,
+        asset.endsWith(".css") ? /text\/css/ : /javascript/,
+      );
+    }
+    const secureSetup = await https(base + "/setup", ca);
+    assert.match(secureSetup.csp, /default-src 'none'/);
+    assert.doesNotMatch(secureSetup.csp, /script-src 'self'/);
+    const publicSetup = await fetch(bootstrap + "/setup");
+    assert.match(
+      publicSetup.headers.get("content-security-policy") ?? "",
+      /default-src 'none'/,
+    );
     const login = await https(base + "/api/login", ca, {
       username: "admin",
       password: "admin",

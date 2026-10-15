@@ -15,7 +15,9 @@ const escape = (value: string) =>
   );
 export function setupRoutes(options: SetupOptions) {
   const router = express.Router();
-  router.use((_req, res, next) => {
+  // This router is mounted alongside the intercom. Its restrictive policy
+  // belongs only to the public setup/download endpoints, not React assets.
+  router.use(["/setup", "/certificate"], (_req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");

@@ -6,8 +6,8 @@ Local browser intercom for small live production crews, with a native desktop la
 
 Install **Mars Comms** on the server computer. On Windows x64, run the installer or open the portable EXE. **No separate Node.js installation, terminal, browser launcher or Git checkout is required.**
 
-- `release/Mars-Comms-0.2.0-win-x64.exe` — installer with desktop/Start menu shortcuts.
-- `release/Mars-Comms-0.2.0-Windows-Portable.exe` — standalone launcher without installation.
+- `release/Mars-Comms-0.2.1-win-x64.exe` — installer with desktop/Start menu shortcuts.
+- `release/Mars-Comms-0.2.1-Windows-Portable.exe` — standalone launcher without installation.
 
 The portable app still stores persistent data in your user application-data folder, not beside the EXE. Windows binaries are currently unsigned. macOS `.app`/DMG and Linux AppImage packaging are configured for builds on those operating systems; local verification was performed on Windows.
 
