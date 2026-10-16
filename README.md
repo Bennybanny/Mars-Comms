@@ -6,8 +6,8 @@ Local browser intercom for small live production crews, with a native desktop la
 
 Install **Mars Comms** on the server computer. On Windows x64, run the installer or open the portable EXE. **No separate Node.js installation, terminal, browser launcher or Git checkout is required.**
 
-- `release/Mars-Comms-0.2.6-win-x64.exe` — installer with desktop/Start menu shortcuts.
-- `release/Mars-Comms-0.2.6-Windows-Portable.exe` — standalone launcher without installation.
+- `release/Mars-Comms-0.3.0-win-x64.exe` — installer with desktop/Start menu shortcuts.
+- `release/Mars-Comms-0.3.0-Windows-Portable.exe` — standalone launcher without installation.
 
 The portable app still stores persistent data in your user application-data folder, not beside the EXE. Windows binaries are currently unsigned. macOS `.app`/DMG and Linux AppImage packaging are configured for builds on those operating systems; local verification was performed on Windows.
 
@@ -27,6 +27,12 @@ Default login: **admin / admin**. The first-run warning links to Admin → Edit 
 NIC selection and ports are remembered. If the saved NIC disappears or changes IP, you must select an available interface; the launcher never silently changes networks. Stop the server and click **Update Certificate** when the selected address is not covered. Previously configured devices keep trusting the same CA.
 
 Localhost / development is for same-computer checks. Phones cannot connect to another computer's `127.0.0.1`; select Ethernet/Wi-Fi for crew access. Starting the launcher/server never resumes client microphone transmission.
+
+## External PTT / Companion 5.1
+
+Mars Comms 0.3.0 adds Control API v1 at `/api/control/v1` and a separate minimal Companion module. Generate a dedicated key in **Admin → Edit user → External Control**; it is shown once and stored hashed. The module discovers authorized group IDs and creates PTT presets with **Press → PTT Down** and **Release → PTT Up** plus feedback for that session's hold. No normal user password or audio is sent through Companion.
+
+Keep exactly one microphone-enabled browser for that operator, and use different accounts for other crew devices. External holds are source-owned, so releasing Companion does not cancel an existing browser Latch. Disconnection, revoked keys, lost authorization and stale heartbeats clear the appropriate holds; reconnect always starts OFF. Read the full [Control API and safety policy](CONTROL-API.md) and the [separate Companion module](https://github.com/Bennybanny/companion-module-mars-comms) for current developer-folder installation and public-CA configuration. Physical Stream Deck operation remains the next acceptance test.
 
 ## Crew certificate setup
 

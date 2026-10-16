@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type { User, Group } from "../shared/types";
+import { ControlCredentials } from "./ControlCredentials";
 export function Admin({
   onClose,
   onError,
@@ -236,6 +237,13 @@ export function Admin({
                 </label>
               ))}
             </fieldset>
+            {edit.id && (
+              <ControlCredentials
+                key={edit.id}
+                userId={edit.id}
+                onError={onError}
+              />
+            )}
             <div className="actions">
               <button type="button" onClick={() => setEdit(null)}>
                 Cancel

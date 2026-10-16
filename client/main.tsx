@@ -27,6 +27,7 @@ function App() {
     [mic, setMic] = useState(""),
     [output, setOutput] = useState("");
   const [listen, setListen] = useState<Listening>({}),
+    [externalTalk, setExternalTalk] = useState<string[]>([]),
     [latch, setLatch] = useState<string[]>([]),
     [held, setHeld] = useState<string[]>([]);
   const engine = useRef<AudioEngine | null>(null),
@@ -55,7 +56,7 @@ function App() {
       setLatch([]);
       setHeld([]);
       audio.silence();
-      c.state([], c.listen);
+      c.state([], c.listen, false);
     };
     const c = new Communications(audio);
     audio.interrupted = () => {
@@ -64,7 +65,7 @@ function App() {
       setLatch([]);
       setHeld([]);
       audio.silence();
-      c.state([], c.listen);
+      c.state([], c.listen, false);
     };
     audio.recovered = () => {
       setReady(true);
@@ -76,6 +77,7 @@ function App() {
       setLatch([]);
       setHeld([]);
       setPeers([]);
+      setExternalTalk([]);
     };
     c.onSnapshot = (m) => {
       setUser(m.user);
@@ -84,6 +86,7 @@ function App() {
       setLatch((previous) => previous.filter((g) => authorized.has(g)));
       setHeld((previous) => previous.filter((g) => authorized.has(g)));
       setPeers(m.peers);
+      setExternalTalk(m.externalTalk ?? []);
       setListen((prev) =>
         Object.fromEntries(
           m.groups.map((g) => [
@@ -117,6 +120,7 @@ function App() {
           .filter(([g]) => allowed.has(g))
           .map(([g, v]) => [g, v.enabled ? v.volume : 0]),
       ),
+      ready && !document.hidden,
     );
   }, [listen, latch, held, ready, groups, user?.id]);
   useEffect(() => {
@@ -132,6 +136,9 @@ function App() {
             v.enabled ? v.volume : 0,
           ]),
         ),
+        engine.current?.ready === true &&
+          !document.hidden &&
+          engine.current.context?.state === "running",
       );
     };
     const visibility = () => {
@@ -236,7 +243,9 @@ function App() {
         <footer>On your network. In your control.</footer>
       </main>
     );
-  const talking = [...new Set([...latch, ...held])];
+  const talking = [
+    ...new Set([...latch, ...held, ...(ready ? externalTalk : [])]),
+  ];
   const connected = status === "CONNECTED";
   return (
     <>

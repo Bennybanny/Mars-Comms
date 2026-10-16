@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
 import { z } from "zod";
 import { Store } from "./store.js";
+import { ControlSessions } from "./control.js";
+import { CONTROL_PATH } from "../shared/control.js";
 import {
   allowedGroups,
   relevant,
@@ -24,6 +26,7 @@ export const messageSchema = z.discriminatedUnion("type", [
     type: z.literal("state"),
     talk: z.array(z.string()).max(100),
     listen: z.array(z.string()).max(100),
+    mediaReady: z.boolean().optional().default(false),
   }),
   z.object({
     type: z.literal("signal"),
@@ -56,9 +59,21 @@ export function signaling(server: Server, store: Store) {
       token: string;
       lastPong: number;
       lastActivity: number;
+      browserTalk: string[];
+      mediaReady: boolean;
     }
   >();
   let shuttingDown = false;
+  const controls = new ControlSessions(
+    store,
+    () =>
+      [...peers.values()].map((entry) => ({
+        id: entry.peer.id,
+        userId: entry.peer.user.id,
+        mediaReady: entry.mediaReady,
+      })),
+    () => broadcast(),
+  );
   // Remove runtime ownership before touching the transport. A close handshake
   // can stall, and late message/pong/close events must not resurrect this peer.
   function removePeer(
@@ -70,6 +85,7 @@ export function signaling(server: Server, store: Store) {
     const entry = peers.get(id);
     if (!entry) return;
     peers.delete(id);
+    controls.removeTarget(id);
     entry.peer.talk = [];
     entry.peer.listen = [];
     if (transport === "terminate") entry.ws.terminate();
@@ -77,6 +93,10 @@ export function signaling(server: Server, store: Store) {
     if (notify) broadcast();
   }
   server.on("upgrade", (req, socket, head) => {
+    if (!shuttingDown && req.url === CONTROL_PATH) {
+      controls.upgrade(req, socket, head);
+      return;
+    }
     if (
       shuttingDown ||
       req.url !== "/signal" ||
@@ -100,6 +120,8 @@ export function signaling(server: Server, store: Store) {
         token,
         lastPong: performance.now(),
         lastActivity: performance.now(),
+        browserTalk: [] as string[],
+        mediaReady: false,
       };
       peers.set(id, entry);
       ws.on("pong", () => {
@@ -122,8 +144,11 @@ export function signaling(server: Server, store: Store) {
               listen = sanitizeState(current, store.groups(), m.listen);
             const changed =
               JSON.stringify([talk, listen]) !==
-              JSON.stringify([entry.peer.talk, entry.peer.listen]);
-            entry.peer.talk = talk;
+                JSON.stringify([entry.browserTalk, entry.peer.listen]) ||
+              entry.mediaReady !== m.mediaReady;
+            entry.browserTalk = talk;
+            entry.mediaReady = m.mediaReady;
+            if (!entry.mediaReady) controls.removeTarget(id);
             entry.peer.listen = listen;
             if (changed) broadcast();
           } else {
@@ -170,9 +195,15 @@ export function signaling(server: Server, store: Store) {
         continue;
       }
       e.peer.user = user;
-      e.peer.talk = sanitizeState(user, groups, e.peer.talk);
+      e.browserTalk = sanitizeState(user, groups, e.browserTalk);
       e.peer.listen = sanitizeState(user, groups, e.peer.listen);
     }
+    controls.reconcile(now);
+    for (const e of peers.values())
+      e.peer.talk = sanitizeState(e.peer.user, groups, [
+        ...e.browserTalk,
+        ...controls.holdsFor(e.peer.id),
+      ]);
     for (const e of peers.values())
       if (e.ws.readyState === WebSocket.OPEN)
         e.ws.send(
@@ -197,12 +228,15 @@ export function signaling(server: Server, store: Store) {
                 talk: p.talk.filter((g) => e.peer.user.groups.includes(g)),
                 listen: p.listen.filter((g) => e.peer.user.groups.includes(g)),
               })),
+            externalTalk: controls.holdsFor(e.peer.id),
           }),
         );
+    controls.publish();
   }
   const timer = setInterval(() => {
     // Reconcile and publish removals in this tick, without waiting for close.
     broadcast();
+    controls.ping();
     for (const e of peers.values()) {
       e.ws.ping(undefined, undefined, (error) => {
         if (error) removePeer(e.peer.id, "Ping failed", "terminate");
@@ -215,6 +249,7 @@ export function signaling(server: Server, store: Store) {
     close() {
       shuttingDown = true;
       clearInterval(timer);
+      const controlsClosed = controls.close();
       for (const id of peers.keys())
         removePeer(id, "Server stopping", "none", false);
       for (const ws of wss.clients)
@@ -226,7 +261,7 @@ export function signaling(server: Server, store: Store) {
         wss.close(() => {
           clearTimeout(timeout);
           peers.clear();
-          resolve();
+          void controlsClosed.then(resolve);
         });
       });
     },

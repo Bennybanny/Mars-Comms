@@ -1,6 +1,6 @@
 {
   "name": "mars-comms",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -12,6 +12,7 @@
     "start": "electron .",
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "playwright test",
+    "test:control:browser": "playwright test --config playwright.control.config.ts",
     "postinstall": "node scripts/install-electron.mjs",
     "package:win": "npm run build && electron-builder --win --publish never",
     "package:dir": "npm run build && electron-builder --dir --publish never",

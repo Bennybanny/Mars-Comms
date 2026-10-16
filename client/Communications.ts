@@ -15,6 +15,17 @@ export class Communications {
   timer?: ReturnType<typeof setTimeout>;
   stopped = false;
   talk: string[] = [];
+  externalTalk: string[] = [];
+  mediaReady = false;
+  private updateAudio() {
+    this.audio.update(
+      this.peers,
+      this.mediaReady
+        ? [...new Set([...this.talk, ...this.externalTalk])]
+        : this.talk,
+      this.listen,
+    );
+  }
   listen: Record<string, number> = {};
   onSnapshot: (m: Extract<ServerMessage, { type: "snapshot" }>) => void =
     () => {};
@@ -32,7 +43,8 @@ export class Communications {
     this.watchdog = setInterval(() => {
       if (
         this.ws?.readyState === WebSocket.OPEN &&
-        Date.now() - this.lastMessage > 12000
+        Date.now() - this.lastMessage >
+          (this.externalTalk.length ? 5000 : 12000)
       )
         this.offline();
       else this.send({ type: "heartbeat" });
@@ -68,14 +80,20 @@ export class Communications {
   send(m: ClientMessage) {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m));
   }
-  state(talk: string[], listen: Record<string, number>) {
+  state(
+    talk: string[],
+    listen: Record<string, number>,
+    mediaReady = this.mediaReady,
+  ) {
     this.talk = this.ws?.readyState === WebSocket.OPEN ? talk : [];
     this.listen = listen;
-    this.audio.update(this.peers, this.talk, listen);
+    this.mediaReady = mediaReady;
+    this.updateAudio();
     this.send({
       type: "state",
       talk: this.talk,
       listen: Object.keys(listen).filter((g) => listen[g] > 0),
+      mediaReady,
     });
   }
   async sync() {
@@ -125,12 +143,13 @@ export class Communications {
         }
       };
     }
-    this.audio.update(this.peers, this.talk, this.listen);
+    this.updateAudio();
   }
   async message(m: ServerMessage) {
     if (m.type === "snapshot") {
       this.self = m.self;
       this.peers = m.peers;
+      this.externalTalk = m.externalTalk ?? [];
       for (const [id, l] of this.links)
         if (!m.peers.some((p) => p.id === id)) {
           l.pc.close();
@@ -140,7 +159,7 @@ export class Communications {
       this.onSnapshot(m);
       await this.sync();
       this.audio.setGain(m.user.micGain);
-      this.audio.update(this.peers, this.talk, this.listen);
+      this.updateAudio();
       return;
     }
     // Listen-only clients acquire their media pipeline on Enable Microphone before joining media negotiation.
@@ -173,6 +192,8 @@ export class Communications {
   }
   reset() {
     this.talk = [];
+    this.externalTalk = [];
+    this.mediaReady = false;
     this.audio.silence();
     for (const [id, l] of this.links) {
       l.pc.close();

@@ -86,12 +86,10 @@ export function createApp(
   app.get("/api/connection-info", async (_req, res) => {
     const info = options.connectionInfo?.();
     if (!info) {
-      res
-        .status(503)
-        .json({
-          error:
-            "Connection details are unavailable. Start Mars Comms with the launcher.",
-        });
+      res.status(503).json({
+        error:
+          "Connection details are unavailable. Start Mars Comms with the launcher.",
+      });
       return;
     }
     const qrOptions = {
@@ -123,6 +121,28 @@ export function createApp(
   });
   app.get("/api/admin/users", (_req, res) => res.json(store.users()));
   app.get("/api/admin/groups", (_req, res) => res.json(store.groups()));
+  app.get("/api/admin/users/:id/control-credentials", (req, res) => {
+    res.json(store.controlCredentials(String(req.params.id)));
+  });
+  app.post("/api/admin/users/:id/control-credentials", (req, res) => {
+    const result = store.createControlCredential(
+      String(req.params.id),
+      req.body?.name,
+    );
+    signals.broadcast();
+    res.json(result);
+  });
+  app.delete(
+    "/api/admin/users/:id/control-credentials/:credentialId",
+    (req, res) => {
+      store.revokeControlCredential(
+        String(req.params.id),
+        String(req.params.credentialId),
+      );
+      signals.broadcast();
+      res.json({ ok: true });
+    },
+  );
   for (const kind of ["users", "groups"] as const) {
     app.post(`/api/admin/${kind}`, (req, res) => {
       res.json(

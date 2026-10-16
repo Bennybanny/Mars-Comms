@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import {
   randomBytes,
+  createHash,
   randomUUID,
   scryptSync,
   timingSafeEqual,
@@ -10,6 +11,7 @@ import { dirname } from "node:path";
 import { z } from "zod";
 import type { User, Group } from "../shared/types.js";
 import { GROUP_COLOR_PATTERN, DEFAULT_GROUP_COLOR } from "../shared/types.js";
+import type { ControlCredential } from "../shared/control.js";
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   return salt + ":" + scryptSync(password, salt, 64).toString("hex");
@@ -47,6 +49,9 @@ export class Store {
     this.db = new DatabaseSync(path);
     this.db.exec(
       "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,username TEXT UNIQUE NOT NULL,hash TEXT NOT NULL,json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS groups(id TEXT PRIMARY KEY,json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,userId TEXT NOT NULL,expires INTEGER NOT NULL);",
+    );
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS control_credentials(id TEXT PRIMARY KEY,userId TEXT NOT NULL,name TEXT NOT NULL,tokenHash TEXT UNIQUE NOT NULL,createdAt INTEGER NOT NULL,lastUsedAt INTEGER,revokedAt INTEGER)",
     );
     if (!this.users().length) {
       for (const name of ["Camera", "Tech", "Show", "Audio"])
@@ -129,6 +134,7 @@ export class Store {
       throw Error("Keep at least one enabled administrator");
     this.db.prepare("DELETE FROM users WHERE id=?").run(id);
     this.db.prepare("DELETE FROM sessions WHERE userId=?").run(id);
+    this.db.prepare("DELETE FROM control_credentials WHERE userId=?").run(id);
   }
   saveGroup(id: string | undefined, input: unknown) {
     const d = groupInput.parse(input);
@@ -178,5 +184,80 @@ export class Store {
   }
   logout(token: string) {
     this.db.prepare("DELETE FROM sessions WHERE token=?").run(token);
+  }
+  controlCredentials(userId: string): ControlCredential[] {
+    return this.db
+      .prepare(
+        "SELECT id,userId,name,createdAt,lastUsedAt,revokedAt FROM control_credentials WHERE userId=? ORDER BY createdAt DESC",
+      )
+      .all(userId) as ControlCredential[];
+  }
+  createControlCredential(userId: string, name: string) {
+    if (!this.user(userId)?.enabled) throw Error("Select an enabled user");
+    const label = z.string().trim().min(1).max(80).parse(name);
+    const token = "mc_" + randomBytes(32).toString("base64url");
+    const credential: ControlCredential = {
+      id: randomUUID(),
+      userId,
+      name: label,
+      createdAt: Date.now(),
+      lastUsedAt: null,
+      revokedAt: null,
+    };
+    this.db.exec("BEGIN");
+    try {
+      this.db
+        .prepare(
+          "UPDATE control_credentials SET revokedAt=? WHERE userId=? AND revokedAt IS NULL",
+        )
+        .run(Date.now(), userId);
+      this.db
+        .prepare("INSERT INTO control_credentials VALUES(?,?,?,?,?,?,?)")
+        .run(
+          credential.id,
+          userId,
+          label,
+          createHash("sha256").update(token).digest("hex"),
+          credential.createdAt,
+          null,
+          null,
+        );
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return { credential, token };
+  }
+  revokeControlCredential(userId: string, id: string) {
+    this.db
+      .prepare(
+        "UPDATE control_credentials SET revokedAt=? WHERE id=? AND userId=? AND revokedAt IS NULL",
+      )
+      .run(Date.now(), id, userId);
+  }
+  controlIdentity(id: string) {
+    const credential = this.db
+      .prepare(
+        "SELECT id,userId,name,createdAt,lastUsedAt,revokedAt FROM control_credentials WHERE id=? AND revokedAt IS NULL",
+      )
+      .get(id) as ControlCredential | undefined;
+    const user = credential && this.user(credential.userId);
+    return credential && user?.enabled ? { credential, user } : undefined;
+  }
+  authenticateControl(token: string) {
+    if (!/^mc_[A-Za-z0-9_-]{43}$/.test(token)) return undefined;
+    const row = this.db
+      .prepare(
+        "SELECT id FROM control_credentials WHERE tokenHash=? AND revokedAt IS NULL",
+      )
+      .get(createHash("sha256").update(token).digest("hex")) as
+      { id: string } | undefined;
+    const identity = row && this.controlIdentity(row.id);
+    if (identity)
+      this.db
+        .prepare("UPDATE control_credentials SET lastUsedAt=? WHERE id=?")
+        .run(Date.now(), identity.credential.id);
+    return identity;
   }
 }

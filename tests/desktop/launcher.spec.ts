@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { request } from "node:https";
+import { WebSocket } from "ws";
 
 async function freePort() {
   const server = createServer();
@@ -176,6 +177,27 @@ test("native launcher generates certificates, exports only public CA, runs HTTPS
       await connect
         .getByRole("button", { name: "Close Connect Device" })
         .click();
+      const operator = await intercom.request
+        .get(`https://127.0.0.1:${port}/api/me`)
+        .then((res) => res.json());
+      const created = await intercom.request.post(
+        `https://127.0.0.1:${port}/api/admin/users/${operator.id}/control-credentials`,
+        { data: { name: "Packaged control test" } },
+      );
+      expect(created.ok()).toBe(true);
+      const key = await created.json();
+      const control = new WebSocket(`wss://127.0.0.1:${port}/api/control/v1`, {
+        ca,
+      });
+      await once(control, "open");
+      control.send(
+        JSON.stringify({ v: 1, type: "authenticate", token: key.token }),
+      );
+      const authenticated = JSON.parse(
+        (await once(control, "message"))[0].toString(),
+      );
+      expect(authenticated.type).toBe("authenticated");
+      control.terminate();
       expect(clientErrors).toEqual([]);
     } finally {
       await client.close();

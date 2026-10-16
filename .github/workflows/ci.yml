@@ -17,6 +17,7 @@ jobs:
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - run: npm run test:control:browser
       - run: npm run test:desktop
         if: runner.os != 'Linux'
       - run: xvfb-run -a npm run test:desktop

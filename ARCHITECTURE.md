@@ -63,6 +63,25 @@ esbuild bundles launcher/controller/server code to CommonJS for Electron main, b
 
 Node's built-in SQLite persists users, salted scrypt hashes, groups, assignments, digital microphone gain and 12-hour server-side sessions. Session cookies are HttpOnly, SameSite=Strict and Secure under HTTPS. Every admin API checks the current database user. Mutations reject foreign Origin headers; authenticated WebSocket upgrades also validate Origin. Login attempts are limited per IP. At least one enabled administrator must remain. Passwords are never returned by APIs. These mechanisms are preserved from the original intercom implementation.
 
+## Control API v1
+
+The separate Companion module is an external command client, not an audio client. Dedicated 256-bit random control credentials are associated with users; SQLite stores only SHA-256 verification values and named credential metadata. Creation/revocation lives in the existing admin user-edit workflow and remains protected by existing session/admin/Origin checks. Raw credentials are shown only on creation. See [CONTROL-API.md](CONTROL-API.md) for the versioned JSON contract.
+
+`server/control.ts` owns control-session hold sets, not a second talk-state engine. The existing `server/signaling.ts` peer registry remains authoritative and computes each peer's effective talk as the authorized union of browser-owned PTT/Latch and source-owned external holds. Browser snapshots carry that peer's external requests into the existing AudioEngine media gates; no second capture path, RTP transport, gain path or negotiation was added.
+
+Control sessions authenticate at WSS `/api/control/v1`, inherit the token user's live authorization and discover stable group IDs. The deterministic v1 policy requires exactly one ready media peer for that user. Zero/multiple candidates fail closed. Holds are pinned to a peer; target loss or ambiguity clears them without transferring to another browser. `removePeer` removes target references; `ControlSessions.remove` clears controller ownership before transport shutdown. Both are reconciled in the existing one-second timer with five-second transport/application liveness deadlines. Admin invalidation broadcasts immediately. The browser's existing watchdog uses a five-second snapshot deadline while external requests exist and always resets sources on reconnect. Source-owned holds survive another source's release but never survive their own session's removal.
+
+```mermaid
+flowchart LR
+  K[Dedicated operator key] --> C[Control session v1]
+  C --> H[Session-owned PTT holds]
+  B[Browser PTT / Latch] --> U[Authorized peer talk union]
+  H --> U
+  U --> A[Existing browser AudioEngine / WebRTC]
+  D[Disconnect / timeout / revoke] --> R[Central session removal]
+  R --> H
+```
+
 ## Signaling and runtime state
 
 `shared/types.ts` defines the wire protocol; Zod validates inbound messages. Each browser connection has its own random peer ID; this also permits multiple devices logged into the same account. The server validates every submitted talk/listen group against current membership and enabled groups. It relays signaling only between peers sharing membership. Clients see only relevant presence and shared group information. PTT, latch and talk state live in memory and are never persisted.
@@ -71,7 +90,7 @@ Node's built-in SQLite persists users, salted scrypt hashes, groups, assignments
 
 WebSocket ping/pong runs every second. The client's existing two-second watchdog also sends an application heartbeat: a transport pong alone cannot prove that page JavaScript is still running. Each registry entry records monotonic last-pong and last-valid-application-message times (initially connection establishment). Both must remain within a five-second deadline. The same reconciliation removes a peer if either expires, tolerating multiple missed checks without a separate cleanup system. A silent network loss or frozen page is detected within approximately five to six seconds of its last qualifying response under normal event-loop scheduling, without waiting for TCP or a close handshake. This is not instantaneous physical network-loss detection; a stalled/suspended server delays its own timers. Session expiry, disabled/deleted users and invalid membership/group state are rechecked before snapshots, at least once per second. Admin mutations/logout already trigger immediate reconciliation. Membership/group changes retain the connected peer but strip all now-unauthorized talk/listen groups before broadcasting. Clients must reload after this protocol update to acquire the application heartbeat.
 
-The client resets all transmission on disconnect, page hiding, window blur and page exit. Reconnection uses the session cookie, a fresh peer ID and empty talk state. Listen preferences are stored per user in localStorage. Lost pointer capture, pointer cancellation and keyboard release clear momentary PTT. Latch and held groups are combined as a set, so releasing PTT does not cancel an existing latch.
+The client resets browser-owned transmission on disconnect, page hiding, window blur and page exit. External holds remain independent of browser blur while its page is visible and audio is ready; hiding the page or interrupting audio also withdraws external media readiness. Reconnection uses the session cookie, a fresh peer ID and empty talk state. Listen preferences are stored per user in localStorage. Lost pointer capture, pointer cancellation and keyboard release clear momentary PTT. Latch and held groups are combined as a set, so releasing PTT does not cancel an existing latch.
 
 ## Audio and topology
 

@@ -87,6 +87,22 @@ test("trusted HTTPS login sets Secure cookie and WSS authenticates with certific
     const snapshot = JSON.parse((await once(ws, "message"))[0].toString());
     assert.equal(snapshot.type, "snapshot");
     assert.equal(snapshot.groups.length, 4);
+    const credential = store.createControlCredential(
+      store.users()[0].id,
+      "TLS control test",
+    );
+    const control = new WebSocket(`wss://127.0.0.1:${port}/api/control/v1`, {
+      ca: cert.cert,
+    });
+    await once(control, "open");
+    control.send(
+      JSON.stringify({ v: 1, type: "authenticate", token: credential.token }),
+    );
+    const authenticated = JSON.parse(
+      (await once(control, "message"))[0].toString(),
+    );
+    assert.equal(authenticated.type, "authenticated");
+    control.terminate();
   } finally {
     ws?.terminate();
     signals.close();
