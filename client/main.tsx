@@ -8,6 +8,9 @@ import { Communications } from "./Communications";
 import { Admin } from "./Admin";
 import { ConnectDevice } from "./ConnectDevice";
 import "./style.css";
+import { ChannelOrdering, SortableChannel } from "./ChannelOrdering";
+import { useChannelOrder } from "./useChannelOrder";
+import { orderedGroups } from "../shared/channel-order";
 type Listening = Record<string, { enabled: boolean; volume: number }>;
 function App() {
   const [user, setUser] = useState<User | null>(null),
@@ -33,6 +36,8 @@ function App() {
   const engine = useRef<AudioEngine | null>(null),
     comms = useRef<Communications | null>(null);
   const listenRef = useRef(listen);
+  const channelOrder = useChannelOrder(user?.id, setError);
+  const displayGroups = orderedGroups(groups, channelOrder.groupIds);
   listenRef.current = listen;
   useEffect(() => {
     api<User>("/me")
@@ -82,6 +87,7 @@ function App() {
     c.onSnapshot = (m) => {
       setUser(m.user);
       setGroups(m.groups);
+      channelOrder.receive(m.channelOrder);
       const authorized = new Set(m.groups.map((g) => g.id));
       setLatch((previous) => previous.filter((g) => authorized.has(g)));
       setHeld((previous) => previous.filter((g) => authorized.has(g)));
@@ -344,13 +350,22 @@ function App() {
                 </button>
               </div>
             )}
-            <div className="cards">
-              {groups.map((g, index) => {
+            <ChannelOrdering
+              groups={displayGroups}
+              disabled={held.length > 0 || channelOrder.saving || !connected}
+              onOrder={(ids) => void channelOrder.save(ids)}
+            >
+              {displayGroups.map((g, index) => {
                 const active = talking.includes(g.id) && connected;
                 const speakers = peers.filter((p) => p.talk.includes(g.id));
                 const l = listen[g.id] ?? { enabled: true, volume: 1 };
                 return (
-                  <article
+                  <SortableChannel
+                    id={g.id}
+                    name={g.name}
+                    disabled={
+                      held.length > 0 || channelOrder.saving || !connected
+                    }
                     className={
                       "card " +
                       (active
@@ -364,7 +379,6 @@ function App() {
                       { "--group": groupColor(g.color) } as React.CSSProperties
                     }
                   >
-                    <span className="channel-color-bar" aria-hidden="true" />
                     <div className="card-heading">
                       <span className="channel-index">
                         CH {String(index + 1).padStart(2, "0")}
@@ -481,10 +495,10 @@ function App() {
                         }
                       />
                     </label>
-                  </article>
+                  </SortableChannel>
                 );
               })}
-            </div>
+            </ChannelOrdering>
             {!groups.length && (
               <p className="empty">
                 No enabled groups assigned. Ask your administrator to assign

@@ -12,6 +12,16 @@ import { z } from "zod";
 import type { User, Group } from "../shared/types.js";
 import { GROUP_COLOR_PATTERN, DEFAULT_GROUP_COLOR } from "../shared/types.js";
 import type { ControlCredential } from "../shared/control.js";
+import type { ChannelOrder } from "../shared/channel-order.js";
+import { allowedGroups } from "../shared/types.js";
+export const channelOrderInput = z
+  .object({
+    groupIds: z
+      .array(z.string().uuid())
+      .max(100)
+      .refine((ids) => new Set(ids).size === ids.length, "Duplicate group IDs"),
+  })
+  .strict();
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   return salt + ":" + scryptSync(password, salt, 64).toString("hex");
@@ -52,6 +62,9 @@ export class Store {
     );
     this.db.exec(
       "CREATE TABLE IF NOT EXISTS control_credentials(id TEXT PRIMARY KEY,userId TEXT NOT NULL,name TEXT NOT NULL,tokenHash TEXT UNIQUE NOT NULL,createdAt INTEGER NOT NULL,lastUsedAt INTEGER,revokedAt INTEGER)",
+    );
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS user_channel_order(userId TEXT PRIMARY KEY,groupIds TEXT NOT NULL,revision INTEGER NOT NULL)",
     );
     if (!this.users().length) {
       for (const name of ["Camera", "Tech", "Show", "Audio"])
@@ -135,6 +148,53 @@ export class Store {
     this.db.prepare("DELETE FROM users WHERE id=?").run(id);
     this.db.prepare("DELETE FROM sessions WHERE userId=?").run(id);
     this.db.prepare("DELETE FROM control_credentials WHERE userId=?").run(id);
+    this.db.prepare("DELETE FROM user_channel_order WHERE userId=?").run(id);
+  }
+  channelOrder(userId: string): ChannelOrder {
+    const row = this.db
+      .prepare(
+        "SELECT groupIds,revision FROM user_channel_order WHERE userId=?",
+      )
+      .get(userId) as { groupIds: string; revision: number } | undefined;
+    const valid = new Set(this.groups().map((g) => g.id));
+    return {
+      groupIds: row
+        ? (JSON.parse(row.groupIds) as string[]).filter((id) => valid.has(id))
+        : [],
+      revision: row?.revision ?? 0,
+    };
+  }
+  saveChannelOrder(userId: string, input: unknown): ChannelOrder {
+    const { groupIds } = channelOrderInput.parse(input);
+    const user = this.user(userId);
+    if (!user?.enabled) throw Error("User unavailable");
+    const groups = this.groups();
+    const visible = allowedGroups(user, groups).map((g) => g.id);
+    if (groupIds.some((id) => !visible.includes(id)))
+      throw Error("Channel order contains an unavailable group");
+    const previous = this.channelOrder(userId);
+    const requested = [
+      ...groupIds,
+      ...visible.filter((id) => !groupIds.includes(id)),
+    ];
+    const base = [
+      ...previous.groupIds,
+      ...visible.filter((id) => !previous.groupIds.includes(id)),
+    ];
+    let index = 0;
+    // Keep hidden-but-existing IDs in their old slots; replace only currently visible slots.
+    const merged = base.map((id) =>
+      visible.includes(id) ? requested[index++] : id,
+    );
+    if (JSON.stringify(merged) === JSON.stringify(previous.groupIds))
+      return previous;
+    const revision = previous.revision + 1;
+    this.db
+      .prepare(
+        "INSERT INTO user_channel_order VALUES(?,?,?) ON CONFLICT(userId) DO UPDATE SET groupIds=excluded.groupIds,revision=excluded.revision",
+      )
+      .run(userId, JSON.stringify(merged), revision);
+    return { groupIds: merged, revision };
   }
   saveGroup(id: string | undefined, input: unknown) {
     const d = groupInput.parse(input);

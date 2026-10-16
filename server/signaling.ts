@@ -245,6 +245,7 @@ export function signaling(server: Server, store: Store) {
               })),
             externalTalk: controls.holdsFor(e.peer.id),
             listenState: { revision: e.listenRevision, groups: e.peer.listen },
+            channelOrder: store.channelOrder(e.peer.user.id),
           }),
         );
     controls.publish();

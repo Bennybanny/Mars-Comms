@@ -6,8 +6,8 @@ Local browser intercom for small live production crews, with a native desktop la
 
 Install **Mars Comms** on the server computer. On Windows x64, run the installer or open the portable EXE. **No separate Node.js installation, terminal, browser launcher or Git checkout is required.**
 
-- `release/Mars-Comms-0.4.0-win-x64.exe` — installer with desktop/Start menu shortcuts.
-- `release/Mars-Comms-0.4.0-Windows-Portable.exe` — standalone launcher without installation.
+- `release/Mars-Comms-0.4.1-win-x64.exe` — installer with desktop/Start menu shortcuts.
+- `release/Mars-Comms-0.4.1-Windows-Portable.exe` — standalone launcher without installation.
 
 The portable app still stores persistent data in your user application-data folder, not beside the EXE. Windows binaries are currently unsigned. macOS `.app`/DMG and Linux AppImage packaging are configured for builds on those operating systems; local verification was performed on Windows.
 
@@ -27,6 +27,10 @@ Default login: **admin / admin**. The first-run warning links to Admin → Edit 
 NIC selection and ports are remembered. If the saved NIC disappears or changes IP, you must select an available interface; the launcher never silently changes networks. Stop the server and click **Update Certificate** when the selected address is not covered. Previously configured devices keep trusting the same CA.
 
 Localhost / development is for same-computer checks. Phones cannot connect to another computer's `127.0.0.1`; select Ethernet/Wi-Fi for crew access. Starting the launcher/server never resumes client microphone transmission.
+
+## Personal channel order
+
+Drag a channel's existing color bar to change your personal order. On touch, hold the bar briefly (250 ms), then drag; normal swipes continue scrolling. Keyboard users focus the bar and use Space, arrows and Space (Escape cancels). Saving is automatic and server-side per user, shared live with that user's other browser/device sessions and retained after logout. Newly assigned channels append; hidden memberships retain their previous slot. PTT holds temporarily disable dragging; Latch remains independent. The 5px color bars and compact mobile card sizes are preserved. See [CHANNEL-ORDER.md](CHANNEL-ORDER.md) for the API/native-iOS contract, migration and behavior.
 
 ## Companion 5.1 control surface
 

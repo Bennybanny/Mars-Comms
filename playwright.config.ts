@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/browser",
-  testIgnore: "**/control.spec.ts",
+  testIgnore: ["**/control.spec.ts", "**/order.spec.ts"],
   workers: 1,
   timeout: 60000,
   use: {

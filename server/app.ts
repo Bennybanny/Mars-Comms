@@ -83,6 +83,14 @@ export function createApp(
     next();
   });
   app.get("/api/me", (_req, res) => res.json(res.locals.user));
+  app.get("/api/me/channel-order", (_req, res) =>
+    res.json(store.channelOrder(res.locals.user.id)),
+  );
+  app.put("/api/me/channel-order", (req, res) => {
+    const order = store.saveChannelOrder(res.locals.user.id, req.body);
+    signals.broadcast();
+    res.json(order);
+  });
   app.get("/api/connection-info", async (_req, res) => {
     const info = options.connectionInfo?.();
     if (!info) {

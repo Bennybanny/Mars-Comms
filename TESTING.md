@@ -1,5 +1,17 @@
 # Verification record
 
+## Version 0.4.1 — personal channel ordering
+
+**58 server/service tests**, **11 existing browser/audio regressions**, **1 Companion control-browser integration** and **5 new ordering browser tests** pass. New server cases cover SQLite persistence across database restart/logout/login, distinct user preferences, current authorization, newly assigned groups, disabled/re-enabled groups, hidden-slot restoration, rename/color/deletion, malformed/duplicate/large/unknown/foreign-user payloads, Origin/session protection, no-op idempotence, last accepted update and live same-user-only snapshots.
+
+The new ordering suite exercises real mouse drags at 1920×1080 and 1366×768, Chromium touch input at 390×844 and 412×915, short tap no-op, 250ms long press, insertion feedback, keyboard sorting/cancel, second-client live updates, separate-user isolation, new page/reload/logout/login persistence, auto-save exactly once, failed save rollback, PTT-hold drag disabling, Latch preservation, unchanged Listen/volume and fast swipe scrolling over the bar on a four-channel mobile page. Keyboard automation waits for sensor startup/layout frames before sending movement, rather than racing its deferred listener initialization. No production sensor timing workaround was added.
+
+Visually inspected dragging screenshots at all four targets. Visible color bars stay **5px**; transparent activators use **18px** of existing padding. Portrait header remains **65px**, third card ends at **647px** at both 390×844 and 412×915; desktop third-card bottom is **651px**. No horizontal overflow or three-card page scrolling was introduced. Current typecheck/Vite/native build and Windows x64 installer/portable packaging pass. Companion module code/layout and the existing WebRTC/AudioEngine implementation were unchanged. Physical iPhone/Safari dragging was not performed; touch input was exercised through Chromium's touch interface using the library's dedicated Touch sensor.
+
+See [CHANNEL-ORDER.md](CHANNEL-ORDER.md) for the schema migration, client-facing native-iOS API contract and conflict/membership policies.
+
+The 0.4.1 packaged executable also passes the native launcher/HTTPS/WSS lifecycle test; the portable EXE passes two visible startup/close cycles with no remaining wrapper process. These use isolated test data.
+
 ## Version 0.4.0 / Companion module 0.2.0
 
 The user confirmed the original Companion/Stream Deck PTT path works on real hardware. This phase extends that existing path with independent session-owned Latch, selected-browser Listen, local Smart timing and Clear My Talk. New physical hardware acceptance is still required; the automated evidence below does not claim physical Stream Deck/headset/iPhone testing of the new controls.

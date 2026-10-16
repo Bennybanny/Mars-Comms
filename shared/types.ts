@@ -46,6 +46,7 @@ export type ServerMessage =
       peers: Peer[];
       externalTalk?: string[];
       listenState?: { revision: number; groups: string[] };
+      channelOrder?: import("./channel-order.js").ChannelOrder;
     }
   | {
       type: "signal";
