@@ -21,8 +21,24 @@ const schema = z.discriminatedUnion("type", [
   z
     .object({
       v: z.literal(1),
-      type: z.enum(["ptt-start", "ptt-stop"]),
+      type: z.enum([
+        "ptt-start",
+        "ptt-stop",
+        "latch-toggle",
+        "latch-on",
+        "latch-off",
+        "listen-toggle",
+        "listen-on",
+        "listen-off",
+      ]),
       groupId: z.string().min(1).max(100),
+      requestId: z.string().max(100).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      v: z.literal(1),
+      type: z.literal("clear-my-talk"),
       requestId: z.string().max(100).optional(),
     })
     .strict(),
@@ -32,11 +48,17 @@ type Session = {
   ws: WebSocket;
   credentialId?: string;
   holds: Set<string>;
+  latches: Set<string>;
   target?: string;
   lastActivity: number;
   lastPong: number;
 };
-export type ControlTarget = { id: string; userId: string; mediaReady: boolean };
+export type ControlTarget = {
+  id: string;
+  userId: string;
+  mediaReady: boolean;
+  listen: string[];
+};
 export class ControlSessions {
   private wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
   private sessions = new Map<string, Session>();
@@ -44,6 +66,11 @@ export class ControlSessions {
     private store: Store,
     private targets: () => ControlTarget[],
     private changed: () => void,
+    private setListen: (
+      peerId: string,
+      groupId: string,
+      enabled: boolean,
+    ) => void,
   ) {}
   private send(session: Session, message: ControlServerMessage) {
     if (session.ws.readyState === WebSocket.OPEN)
@@ -54,6 +81,7 @@ export class ControlSessions {
     if (!session) return;
     this.sessions.delete(id);
     session.holds.clear();
+    session.latches.clear();
     session.target = undefined;
     // Drop ownership first; do not depend on a close handshake completing.
     session.ws.close(1008, reason);
@@ -61,7 +89,9 @@ export class ControlSessions {
     deadline.unref();
     session.ws.once("close", () => clearTimeout(deadline));
     if (session.credentialId)
-      console.info(`Control session removed: ${id} (${reason}); PTT cleared`);
+      console.info(
+        `Control session removed: ${id} (${reason}); PTT/Latch cleared`,
+      );
     if (notify) this.changed();
   }
   upgrade(req: IncomingMessage, socket: Duplex, head: Buffer) {
@@ -78,6 +108,7 @@ export class ControlSessions {
         id: randomUUID(),
         ws,
         holds: new Set(),
+        latches: new Set(),
         lastActivity: performance.now(),
         lastPong: performance.now(),
       };
@@ -153,13 +184,27 @@ export class ControlSessions {
           return;
         }
         const identity = this.store.controlIdentity(session.credentialId)!;
+        if (message.type === "clear-my-talk") {
+          session.holds.clear();
+          session.latches.clear();
+          session.target = undefined;
+          this.send(session, {
+            v: 1,
+            type: "ack",
+            requestId: message.requestId,
+            held: false,
+          });
+          this.changed();
+          return;
+        }
         const allowed = allowedGroups(identity.user, this.store.groups());
         const candidates = this.targets().filter(
           (p) => p.userId === identity.user.id && p.mediaReady,
         );
         if (
           !allowed.some((g) => g.id === message.groupId) ||
-          (message.type === "ptt-start" && candidates.length !== 1)
+          (!["ptt-stop", "latch-off"].includes(message.type) &&
+            candidates.length !== 1)
         ) {
           this.send(session, {
             v: 1,
@@ -179,15 +224,34 @@ export class ControlSessions {
           this.changed();
           return;
         }
-        if (message.type === "ptt-start") {
+        if (message.type.startsWith("listen-")) {
+          const target = candidates[0];
+          this.setListen(
+            target.id,
+            message.groupId,
+            message.type === "listen-toggle"
+              ? !target.listen.includes(message.groupId)
+              : message.type === "listen-on",
+          );
+        } else if (message.type.startsWith("latch-")) {
+          const enabled =
+            message.type === "latch-toggle"
+              ? !session.latches.has(message.groupId)
+              : message.type === "latch-on";
+          if (enabled) {
+            session.target = candidates[0].id;
+            session.latches.add(message.groupId);
+          } else session.latches.delete(message.groupId);
+        } else if (message.type === "ptt-start") {
           session.target = candidates[0].id;
           session.holds.add(message.groupId);
         } else {
           session.holds.delete(message.groupId);
-          if (!session.holds.size) session.target = undefined;
         }
+        if (!session.holds.size && !session.latches.size)
+          session.target = undefined;
         console.info(
-          `Control PTT ${message.type === "ptt-start" ? "START" : "STOP"}: ${session.id} group ${message.groupId}`,
+          `Control ${message.type}: ${session.id} group ${message.groupId}`,
         );
         this.send(session, {
           v: 1,
@@ -221,12 +285,20 @@ export class ControlSessions {
       );
       if (candidates.length !== 1 || candidates[0].id !== session.target) {
         session.holds.clear();
+        session.latches.clear();
         session.target = undefined;
-      } else
+      } else {
         session.holds = new Set(
           sanitizeState(identity.user, this.store.groups(), [...session.holds]),
         );
-      if (!session.holds.size) session.target = undefined;
+        session.latches = new Set(
+          sanitizeState(identity.user, this.store.groups(), [
+            ...session.latches,
+          ]),
+        );
+      }
+      if (!session.holds.size && !session.latches.size)
+        session.target = undefined;
     }
   }
   holdsFor(peerId: string) {
@@ -234,7 +306,7 @@ export class ControlSessions {
       ...new Set(
         [...this.sessions.values()]
           .filter((s) => s.target === peerId)
-          .flatMap((s) => [...s.holds]),
+          .flatMap((s) => [...s.holds, ...s.latches]),
       ),
     ];
   }
@@ -242,6 +314,7 @@ export class ControlSessions {
     for (const session of this.sessions.values())
       if (session.target === peerId) {
         session.holds.clear();
+        session.latches.clear();
         session.target = undefined;
       }
   }
@@ -263,7 +336,10 @@ export class ControlSessions {
         },
         groups: allowedGroups(identity.user, this.store.groups()),
         holds: [...session.holds],
+        latches: [...session.latches],
+        listening: candidates.length === 1 ? [...candidates[0].listen] : [],
         targetPeerId: session.target ?? null,
+        mediaPeerId: candidates.length === 1 ? candidates[0].id : null,
         media:
           candidates.length === 1
             ? "ready"

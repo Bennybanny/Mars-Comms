@@ -6,8 +6,8 @@ Local browser intercom for small live production crews, with a native desktop la
 
 Install **Mars Comms** on the server computer. On Windows x64, run the installer or open the portable EXE. **No separate Node.js installation, terminal, browser launcher or Git checkout is required.**
 
-- `release/Mars-Comms-0.3.0-win-x64.exe` — installer with desktop/Start menu shortcuts.
-- `release/Mars-Comms-0.3.0-Windows-Portable.exe` — standalone launcher without installation.
+- `release/Mars-Comms-0.4.0-win-x64.exe` — installer with desktop/Start menu shortcuts.
+- `release/Mars-Comms-0.4.0-Windows-Portable.exe` — standalone launcher without installation.
 
 The portable app still stores persistent data in your user application-data folder, not beside the EXE. Windows binaries are currently unsigned. macOS `.app`/DMG and Linux AppImage packaging are configured for builds on those operating systems; local verification was performed on Windows.
 
@@ -28,11 +28,11 @@ NIC selection and ports are remembered. If the saved NIC disappears or changes I
 
 Localhost / development is for same-computer checks. Phones cannot connect to another computer's `127.0.0.1`; select Ethernet/Wi-Fi for crew access. Starting the launcher/server never resumes client microphone transmission.
 
-## External PTT / Companion 5.1
+## Companion 5.1 control surface
 
-Mars Comms 0.3.0 adds Control API v1 at `/api/control/v1` and a separate minimal Companion module. Generate a dedicated key in **Admin → Edit user → External Control**; it is shown once and stored hashed. The module discovers authorized group IDs and creates PTT presets with **Press → PTT Down** and **Release → PTT Up** plus feedback for that session's hold. No normal user password or audio is sent through Companion.
+Mars Comms 0.4.0 and Companion module 0.2.0 provide **PTT, Latch, Listen and Smart** presets per authorized channel, plus **Clear My Talk**. The physically tested PTT commands stay unchanged. Smart taps toggle session-owned Latch; holds start PTT after a configurable 400 ms. Native Companion 5 graphics provide dark-purple buttons, configured channel-color bars, large channel names, smaller function labels and white own-function borders. Live name/color bindings update already placed new presets. Generate a dedicated key in **Admin → Edit user → External Control**; it is shown once and stored hashed. No normal user password or audio is sent through Companion.
 
-Keep exactly one microphone-enabled browser for that operator, and use different accounts for other crew devices. External holds are source-owned, so releasing Companion does not cancel an existing browser Latch. Disconnection, revoked keys, lost authorization and stale heartbeats clear the appropriate holds; reconnect always starts OFF. Read the full [Control API and safety policy](CONTROL-API.md) and the [separate Companion module](https://github.com/Bennybanny/companion-module-mars-comms) for current developer-folder installation and public-CA configuration. Physical Stream Deck operation remains the next acceptance test.
+Keep exactly one microphone-enabled browser for that operator, and use different accounts for other crew devices. External PTT/Latch are source-owned; Clear My Talk affects only this Companion connection. Listen affects only the operator's selected browser. Disconnection, revoked keys, lost authorization and stale heartbeats clear the appropriate talk sources; reconnect always starts OFF. See [setup, controls and physical acceptance](CONTROL-SURFACE.md), [Control API and safety policy](CONTROL-API.md) and the [separate Companion module](https://github.com/Bennybanny/companion-module-mars-comms). The original physical PTT integration passed; the new four-button control surface needs the expanded hardware acceptance sequence.
 
 ## Crew certificate setup
 

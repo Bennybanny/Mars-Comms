@@ -24,7 +24,13 @@ export type User = {
 export type Peer = { id: string; user: User; talk: string[]; listen: string[] };
 export type ClientMessage =
   | { type: "heartbeat" }
-  | { type: "state"; talk: string[]; listen: string[]; mediaReady?: boolean }
+  | {
+      type: "state";
+      talk: string[];
+      listen: string[];
+      mediaReady?: boolean;
+      listenRevision?: number;
+    }
   | {
       type: "signal";
       to: string;
@@ -39,6 +45,7 @@ export type ServerMessage =
       groups: Group[];
       peers: Peer[];
       externalTalk?: string[];
+      listenState?: { revision: number; groups: string[] };
     }
   | {
       type: "signal";

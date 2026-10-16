@@ -113,11 +113,18 @@ async function fixture() {
     start: boolean,
     groupId = groups[0].id,
   ) {
+    return command(client, start ? "ptt-start" : "ptt-stop", groupId);
+  }
+  async function command(
+    client: Awaited<ReturnType<typeof control>>,
+    type: string,
+    groupId?: string,
+  ) {
     const requestId = String(client.messages.length);
     client.ws.send(
       JSON.stringify({
         v: 1,
-        type: start ? "ptt-start" : "ptt-stop",
+        type,
         groupId,
         requestId,
       }),
@@ -154,6 +161,7 @@ async function fixture() {
     control,
     state,
     ptt,
+    command,
     observed,
     close,
   };
@@ -185,11 +193,14 @@ test("membership removal clears only unauthorized held groups", async () => {
       control = await f.control();
     await f.ptt(control, true, f.groups[0].id);
     await f.ptt(control, true, f.groups[1].id);
+    await f.command(control, "latch-on", f.groups[0].id);
+    await f.command(control, "latch-on", f.groups[1].id);
     await until(() => control.latest?.holds.length === 2);
     f.store.saveUser(f.user.id, { ...f.user, groups: [f.groups[1].id] });
     f.signals.broadcast();
     await until(() => control.latest?.holds.length === 1);
     assert.deepEqual(control.latest!.holds, [f.groups[1].id]);
+    assert.deepEqual(control.latest!.latches, [f.groups[1].id]);
     assert.deepEqual(f.observed(media.latest.self).talk, [f.groups[1].id]);
   } finally {
     await f.close();
@@ -326,65 +337,151 @@ test("browser and two controller sources release only their own holds", async ()
   }
 });
 
-for (const reason of [
-  "revoke",
-  "disable",
-  "membership",
-  "browser-loss",
-  "not-ready",
-  "second-media",
-  "group-disable",
-] as const) {
-  test(`active external PTT is cleared on ${reason}`, async () => {
-    const f = await fixture();
-    try {
-      const media = await f.browser(),
-        control = await f.control();
-      await f.ptt(control, true);
-      await until(() => f.observed(media.latest.self)?.talk.length === 1);
-      if (reason === "revoke")
-        f.store.revokeControlCredential(f.user.id, f.key.credential.id);
-      if (reason === "disable")
-        f.store.saveUser(f.user.id, { ...f.user, enabled: false });
-      if (reason === "membership")
-        f.store.saveUser(f.user.id, { ...f.user, groups: [f.groups[1].id] });
-      if (reason === "group-disable")
-        f.store.saveGroup(f.groups[0].id, { ...f.groups[0], enabled: false });
-      if (reason === "browser-loss") media.ws.terminate();
-      if (reason === "not-ready") f.state(media, [], false);
-      if (reason === "second-media") await f.browser();
-      f.signals.broadcast();
-      await until(() => !f.observed(media.latest.self)?.talk.length);
-      if (reason !== "disable" && reason !== "revoke")
-        await until(() => control.latest?.holds.length === 0);
-    } finally {
-      await f.close();
-    }
-  });
-}
+test("Latch/PTT and Clear My Talk preserve other sessions and browser sources; reconnect stays safe", async () => {
+  const f = await fixture();
+  try {
+    const media = await f.browser(),
+      a = await f.control(),
+      b = await f.control(),
+      id = f.groups[0].id;
+    await f.command(a, "latch-toggle", id);
+    await until(() => a.latest?.latches.includes(id) === true);
+    await f.ptt(a, true);
+    await f.ptt(a, false);
+    assert.deepEqual(a.latest!.latches, [id]);
+    await f.command(b, "latch-on", id);
+    f.state(media, [id]);
+    await f.command(a, "clear-my-talk");
+    await until(() => a.latest?.latches.length === 0);
+    assert.deepEqual(b.latest!.latches, [id]);
+    assert(f.observed(media.latest.self).talk.includes(id));
+    await f.command(b, "clear-my-talk");
+    assert(f.observed(media.latest.self).talk.includes(id));
+    f.state(media, []);
+    await until(() => f.observed(media.latest.self)?.talk.length === 0);
+    await f.command(a, "latch-on", id);
+    a.ws.terminate();
+    await until(() => f.observed(media.latest.self)?.talk.length === 0);
+    const fresh = await f.control();
+    await until(() => !!fresh.latest);
+    assert.deepEqual(fresh.latest!.holds, []);
+    assert.deepEqual(fresh.latest!.latches, []);
+  } finally {
+    await f.close();
+  }
+});
 
-for (const [heartbeat, autoPong] of [
-  [false, true],
-  [true, false],
-]) {
-  test(
-    `dead controller cleanup without final OFF (application heartbeat=${heartbeat})`,
-    { timeout: 12000 },
-    async () => {
+test("Listen affects only the authenticated media browser; stale browser state cannot undo commands", async () => {
+  const f = await fixture();
+  try {
+    const media = await f.browser(),
+      control = await f.control(),
+      id = f.groups[0].id;
+    await until(() => control.latest?.listening.includes(id) === true);
+    const observerListen = [...f.observer.latest.listenState.groups];
+    await f.command(control, "listen-toggle", id);
+    await until(() => control.latest?.listening.includes(id) === false);
+    assert(!media.latest.listenState.groups.includes(id));
+    f.state(media, []); // old revision 0 in flight, must not overwrite the external change
+    await delay(30);
+    assert(!control.latest!.listening.includes(id));
+    assert.deepEqual(f.observer.latest.listenState.groups, observerListen);
+    media.ws.send(
+      JSON.stringify({
+        type: "state",
+        talk: [],
+        listen: [],
+        mediaReady: true,
+        listenRevision: media.latest.listenState.revision,
+      }),
+    );
+    await until(() => control.latest?.listening.length === 0);
+    await f.command(control, "listen-on", id);
+    await until(() => control.latest?.listening.includes(id) === true);
+    await f.command(control, "listen-off", id);
+    await until(() => control.latest?.listening.includes(id) === false);
+    for (const type of [
+      "latch-toggle",
+      "latch-on",
+      "latch-off",
+      "listen-toggle",
+      "listen-on",
+      "listen-off",
+    ])
+      assert.equal(
+        (await f.command(control, type, f.groups[2].id)).type,
+        "error",
+      );
+  } finally {
+    await f.close();
+  }
+});
+
+for (const source of ["ptt-start", "latch-on"])
+  for (const reason of [
+    "revoke",
+    "disable",
+    "membership",
+    "browser-loss",
+    "not-ready",
+    "second-media",
+    "group-disable",
+  ] as const) {
+    test(`active external ${source} is cleared on ${reason}`, async () => {
       const f = await fixture();
       try {
         const media = await f.browser(),
-          control = await f.control(f.key.token, heartbeat, autoPong);
-        await f.ptt(control, true);
+          control = await f.control();
+        await f.command(control, source, f.groups[0].id);
         await until(() => f.observed(media.latest.self)?.talk.length === 1);
-        await until(
-          () => f.observed(media.latest.self)?.talk.length === 0,
-          7000,
-        );
-        assert.equal(media.ws.readyState, WebSocket.OPEN);
+        if (reason === "revoke")
+          f.store.revokeControlCredential(f.user.id, f.key.credential.id);
+        if (reason === "disable")
+          f.store.saveUser(f.user.id, { ...f.user, enabled: false });
+        if (reason === "membership")
+          f.store.saveUser(f.user.id, { ...f.user, groups: [f.groups[1].id] });
+        if (reason === "group-disable")
+          f.store.saveGroup(f.groups[0].id, { ...f.groups[0], enabled: false });
+        if (reason === "browser-loss") media.ws.terminate();
+        if (reason === "not-ready") f.state(media, [], false);
+        if (reason === "second-media") await f.browser();
+        f.signals.broadcast();
+        await until(() => !f.observed(media.latest.self)?.talk.length);
+        if (reason !== "disable" && reason !== "revoke")
+          await until(
+            () =>
+              control.latest?.holds.length === 0 &&
+              control.latest?.latches.length === 0,
+          );
       } finally {
         await f.close();
       }
-    },
-  );
-}
+    });
+  }
+
+for (const source of ["ptt-start", "latch-on"])
+  for (const [heartbeat, autoPong] of [
+    [false, true],
+    [true, false],
+  ]) {
+    test(
+      `dead controller ${source} cleanup without final OFF (application heartbeat=${heartbeat})`,
+      { timeout: 12000 },
+      async () => {
+        const f = await fixture();
+        try {
+          const media = await f.browser(),
+            control = await f.control(f.key.token, heartbeat, autoPong);
+          await f.command(control, source, f.groups[0].id);
+          await until(() => f.observed(media.latest.self)?.talk.length === 1);
+          await until(
+            () => f.observed(media.latest.self)?.talk.length === 0,
+            7000,
+          );
+          assert.equal(media.ws.readyState, WebSocket.OPEN);
+        } finally {
+          await f.close();
+        }
+      },
+    );
+  }

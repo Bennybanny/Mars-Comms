@@ -91,7 +91,14 @@ function App() {
         Object.fromEntries(
           m.groups.map((g) => [
             g.id,
-            prev[g.id] ?? { enabled: true, volume: 1 },
+            m.listenState
+              ? {
+                  enabled: m.listenState.groups.includes(g.id),
+                  volume: m.listenState.groups.includes(g.id)
+                    ? prev[g.id]?.volume || 1
+                    : (prev[g.id]?.volume ?? 1),
+                }
+              : (prev[g.id] ?? { enabled: true, volume: 1 }),
           ]),
         ),
       );

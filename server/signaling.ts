@@ -27,6 +27,7 @@ export const messageSchema = z.discriminatedUnion("type", [
     talk: z.array(z.string()).max(100),
     listen: z.array(z.string()).max(100),
     mediaReady: z.boolean().optional().default(false),
+    listenRevision: z.number().int().nonnegative().optional().default(0),
   }),
   z.object({
     type: z.literal("signal"),
@@ -61,6 +62,7 @@ export function signaling(server: Server, store: Store) {
       lastActivity: number;
       browserTalk: string[];
       mediaReady: boolean;
+      listenRevision: number;
     }
   >();
   let shuttingDown = false;
@@ -71,8 +73,17 @@ export function signaling(server: Server, store: Store) {
         id: entry.peer.id,
         userId: entry.peer.user.id,
         mediaReady: entry.mediaReady,
+        listen: entry.peer.listen,
       })),
     () => broadcast(),
+    (peerId, groupId, enabled) => {
+      const entry = peers.get(peerId);
+      if (!entry) return;
+      entry.peer.listen = enabled
+        ? [...new Set([...entry.peer.listen, groupId])]
+        : entry.peer.listen.filter((id) => id !== groupId);
+      entry.listenRevision++;
+    },
   );
   // Remove runtime ownership before touching the transport. A close handshake
   // can stall, and late message/pong/close events must not resurrect this peer.
@@ -122,6 +133,7 @@ export function signaling(server: Server, store: Store) {
         lastActivity: performance.now(),
         browserTalk: [] as string[],
         mediaReady: false,
+        listenRevision: 0,
       };
       peers.set(id, entry);
       ws.on("pong", () => {
@@ -141,7 +153,10 @@ export function signaling(server: Server, store: Store) {
           if (m.type === "heartbeat") return;
           if (m.type === "state") {
             const talk = sanitizeState(current, store.groups(), m.talk),
-              listen = sanitizeState(current, store.groups(), m.listen);
+              listen =
+                m.listenRevision === entry.listenRevision
+                  ? sanitizeState(current, store.groups(), m.listen)
+                  : entry.peer.listen;
             const changed =
               JSON.stringify([talk, listen]) !==
                 JSON.stringify([entry.browserTalk, entry.peer.listen]) ||
@@ -229,6 +244,7 @@ export function signaling(server: Server, store: Store) {
                 listen: p.listen.filter((g) => e.peer.user.groups.includes(g)),
               })),
             externalTalk: controls.holdsFor(e.peer.id),
+            listenState: { revision: e.listenRevision, groups: e.peer.listen },
           }),
         );
     controls.publish();

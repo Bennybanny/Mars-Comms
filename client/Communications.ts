@@ -17,6 +17,7 @@ export class Communications {
   talk: string[] = [];
   externalTalk: string[] = [];
   mediaReady = false;
+  listenRevision = 0;
   private updateAudio() {
     this.audio.update(
       this.peers,
@@ -94,6 +95,7 @@ export class Communications {
       talk: this.talk,
       listen: Object.keys(listen).filter((g) => listen[g] > 0),
       mediaReady,
+      listenRevision: this.listenRevision,
     });
   }
   async sync() {
@@ -150,6 +152,15 @@ export class Communications {
       this.self = m.self;
       this.peers = m.peers;
       this.externalTalk = m.externalTalk ?? [];
+      if (m.listenState && m.listenState.revision > this.listenRevision) {
+        this.listenRevision = m.listenState.revision;
+        this.listen = Object.fromEntries(
+          m.groups.map((g) => [
+            g.id,
+            m.listenState!.groups.includes(g.id) ? this.listen[g.id] || 1 : 0,
+          ]),
+        );
+      } else m.listenState = undefined;
       for (const [id, l] of this.links)
         if (!m.peers.some((p) => p.id === id)) {
           l.pc.close();
@@ -194,6 +205,7 @@ export class Communications {
     this.talk = [];
     this.externalTalk = [];
     this.mediaReady = false;
+    this.listenRevision = 0;
     this.audio.silence();
     for (const [id, l] of this.links) {
       l.pc.close();

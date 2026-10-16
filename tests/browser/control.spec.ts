@@ -44,11 +44,9 @@ test("external PTT gates real browser RTP; browser latch, disconnect and revoke 
     await management
       .getByRole("button", { name: "Admin", exact: true })
       .click();
-    const row = management
-      .getByRole("row")
-      .filter({
-        has: management.getByRole("cell", { name: "camera", exact: true }),
-      });
+    const row = management.getByRole("row").filter({
+      has: management.getByRole("cell", { name: "camera", exact: true }),
+    });
     await row.getByRole("button", { name: "Edit", exact: true }).click();
     await management
       .getByLabel("Control credential name")
@@ -86,6 +84,14 @@ test("external PTT gates real browser RTP; browser latch, disconnect and revoke 
           v: 1,
           type: start ? "ptt-start" : "ptt-stop",
           groupId,
+        }),
+      );
+    const command = (type: string) =>
+      ws.send(
+        JSON.stringify({
+          v: 1,
+          type,
+          ...(type === "clear-my-talk" ? {} : { groupId }),
         }),
       );
     const energy = () =>
@@ -151,8 +157,103 @@ test("external PTT gates real browser RTP; browser latch, disconnect and revoke 
         .toBeGreaterThan(0.0001);
       moduleClient.ptt(groupId, false);
       await expect(receiving).toHaveText("");
+      const Panel = await import(
+        pathToFileURL(
+          join(process.env.MARS_COMPANION_MODULE_DIR, "dist/panel.js"),
+        ).href
+      );
+      const panel = new Panel.PanelControls(moduleClient);
+      moduleClient.on("snapshot", (state: any) => panel.reconcile(state));
+      panel.reconcile(moduleClient.snapshot);
+      panel.smartDown(groupId, "smart-key");
+      await p.waitForTimeout(100);
+      expect(moduleClient.snapshot.holds).toEqual([]);
+      panel.smartUp(groupId, "smart-key");
+      await expect.poll(() => moduleClient.snapshot.latches).toEqual([groupId]);
+      await expect(receiving).toHaveText("camera");
+      panel.smartDown(groupId, "smart-key");
+      await expect.poll(() => moduleClient.snapshot.holds).toEqual([groupId]);
+      panel.smartUp(groupId, "smart-key");
+      await expect.poll(() => moduleClient.snapshot.holds).toEqual([]);
+      expect(moduleClient.snapshot.latches).toEqual([groupId]);
+      await expect(receiving).toHaveText("camera");
+      panel.clear();
+      await expect(receiving).toHaveText("");
+      panel.smartDown(groupId, "smart-key");
+      await expect.poll(() => moduleClient.snapshot.holds).toEqual([groupId]);
+      panel.smartUp(groupId, "smart-key");
+      await expect(receiving).toHaveText("");
+      moduleClient.command("latch-on", groupId);
+      await expect(receiving).toHaveText("camera");
       moduleClient.stop();
+      await expect(receiving).toHaveText("");
     }
+    command("latch-toggle");
+    await expect.poll(() => snapshot.latches).toEqual([groupId]);
+    await expect(receiving).toHaveText("camera");
+    send(true);
+    send(false);
+    await expect.poll(() => snapshot.holds).toEqual([]);
+    expect(snapshot.latches).toEqual([groupId]);
+    command("clear-my-talk");
+    await expect(receiving).toHaveText("");
+    // External Listen changes both actual playback and the browser's persisted toggle.
+    await q.locator(".latch").first().click();
+    await expect
+      .poll(() =>
+        p
+          .locator("audio")
+          .evaluateAll((els) =>
+            els.some((el) => (el as HTMLAudioElement).volume > 0),
+          ),
+      )
+      .toBe(true);
+    command("listen-off");
+    await expect(camera.locator(".listen")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await expect
+      .poll(() =>
+        p
+          .locator("audio")
+          .evaluateAll((els) =>
+            els.every((el) => (el as HTMLAudioElement).volume === 0),
+          ),
+      )
+      .toBe(true);
+    await expect(q.locator(".listen").first()).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    command("listen-toggle");
+    await expect(camera.locator(".listen")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect
+      .poll(() =>
+        p
+          .locator("audio")
+          .evaluateAll((els) =>
+            els.some((el) => (el as HTMLAudioElement).volume > 0),
+          ),
+      )
+      .toBe(true);
+    await camera.locator(".listen").click();
+    await expect.poll(() => snapshot.listening.includes(groupId)).toBe(false);
+    command("listen-on");
+    await expect(camera.locator(".listen")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const slider = camera.getByRole("slider");
+    await slider.fill("0");
+    await expect.poll(() => snapshot.listening.includes(groupId)).toBe(false);
+    command("listen-on");
+    await expect.poll(() => snapshot.listening.includes(groupId)).toBe(true);
+    await expect(slider).toHaveValue("1");
+    await q.locator(".latch").first().click();
     send(true);
     await expect(receiving).toHaveText("camera");
     clearInterval(heartbeat);
