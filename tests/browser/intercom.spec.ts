@@ -267,6 +267,32 @@ test("admin can create and edit users/groups through the interface", async ({
   await page.getByLabel("Mic level", { exact: false }).fill("1.25");
   await page.getByRole("button", { name: "Save user" }).click();
   await expect(row).toContainText("125%");
+  await page.getByRole("button", { name: "Admin", exact: true }).click();
+  const groups = await page.request
+    .get("/api/admin/groups")
+    .then((res) => res.json());
+  const group = groups.find((g: any) => g.name === "Camera");
+  const channel = card(page, "Camera");
+  const previous = await channel
+    .locator(".channel-color-bar")
+    .evaluate((bar) => getComputedStyle(bar).backgroundColor);
+  const changed = await page.request.put("/api/admin/groups/" + group.id, {
+    data: { ...group, color: "#eab308" },
+  });
+  expect(changed.ok()).toBe(true);
+  await expect(channel.locator(".channel-color-bar")).toHaveCSS(
+    "background-color",
+    "rgb(234, 179, 8)",
+  );
+  // Store updates replace rows; restore the original fixture order as well.
+  for (const original of groups)
+    await page.request.put("/api/admin/groups/" + original.id, {
+      data: original,
+    });
+  await expect(channel.locator(".channel-color-bar")).toHaveCSS(
+    "background-color",
+    previous,
+  );
 });
 test("membership isolation and responsive layouts", async ({ page }) => {
   await login(page, "tech");

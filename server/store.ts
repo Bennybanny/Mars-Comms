@@ -9,6 +9,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import type { User, Group } from "../shared/types.js";
+import { GROUP_COLOR_PATTERN, DEFAULT_GROUP_COLOR } from "../shared/types.js";
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   return salt + ":" + scryptSync(password, salt, 64).toString("hex");
@@ -36,7 +37,7 @@ export const userInput = z.object({
 });
 export const groupInput = z.object({
   name: z.string().trim().min(1).max(64),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  color: z.string().regex(GROUP_COLOR_PATTERN),
   enabled: z.boolean(),
 });
 export class Store {
@@ -49,7 +50,11 @@ export class Store {
     );
     if (!this.users().length) {
       for (const name of ["Camera", "Tech", "Show", "Audio"])
-        this.saveGroup(undefined, { name, color: "#8b5cf6", enabled: true });
+        this.saveGroup(undefined, {
+          name,
+          color: DEFAULT_GROUP_COLOR,
+          enabled: true,
+        });
       this.saveUser(undefined, {
         username: "admin",
         displayName: "Administrator",

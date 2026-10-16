@@ -41,6 +41,24 @@ for (const [width, height] of [
     await captureContext(page);
     await login(page);
     await expect(page.locator("article.card")).toHaveCount(3);
+    const configured = [
+      "rgb(37, 99, 235)",
+      "rgb(139, 92, 246)",
+      "rgb(220, 38, 38)",
+    ];
+    for (let i = 0; i < 3; i++) {
+      const channel = page.locator("article.card").nth(i);
+      await expect(channel.locator(".channel-color-bar")).toHaveCSS(
+        "background-color",
+        configured[i],
+      );
+      await expect(channel.locator("h2 .dot")).toHaveCount(0);
+      const bar = (await channel.locator(".channel-color-bar").boundingBox())!;
+      const bounds = (await channel.boundingBox())!;
+      expect(bar.height).toBe(5);
+      expect(bar.width).toBeGreaterThanOrEqual(bounds.width - 2);
+      expect(bar.y - bounds.y).toBeLessThanOrEqual(1);
+    }
     await expect(
       page.getByText("LIVE PRODUCTION / INTERCOM", { exact: true }),
     ).toHaveCount(0);
@@ -154,6 +172,13 @@ for (const [width, height] of [
     const latch = page.locator(".card").first().locator(".latch");
     await latch.click();
     await expect(latch).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".card").first()).toHaveClass(/transmitting/);
+    await expect(page.locator(".card").first().locator(".ptt")).toHaveClass(
+      /active/,
+    );
+    await expect(
+      page.locator(".card").first().locator(".channel-color-bar"),
+    ).toHaveCSS("background-color", "rgb(37, 99, 235)");
     await page.screenshot({ path: "test-results/ui-mobile-latch.png" });
     await page.evaluate(() => (window as any).testAudioContext.suspend());
     await expect(page.locator("header .resume-audio")).toBeVisible();
@@ -300,6 +325,7 @@ test("mobile talker indication and blocked playback recovery stay compact", asyn
     await expect(page.locator("header .resume-audio")).toHaveCount(0);
     await peer.locator(".latch").first().click();
     await expect(page.locator(".speakers").first()).toHaveText("receiver");
+    await expect(page.locator(".card").first()).toHaveClass(/receiving/);
     await expect(page.locator("header .crew-count")).toHaveAttribute(
       "aria-label",
       "2 crew online",
@@ -318,6 +344,30 @@ test("mobile talker indication and blocked playback recovery stay compact", asyn
     await expect(page.locator("header .resume-audio")).toHaveCount(0);
   } finally {
     await Promise.all([a.close(), b.close()]);
+  }
+});
+
+test("invalid and missing group colors fall back to the existing accent", async ({
+  page,
+}) => {
+  await page.routeWebSocket("**/signal", (socket) => {
+    const server = socket.connectToServer();
+    server.onMessage((raw) => {
+      const message = JSON.parse(raw.toString());
+      if (message.type === "snapshot") {
+        message.groups[0].color = "not-a-color";
+        delete message.groups[1].color;
+      }
+      socket.send(JSON.stringify(message));
+    });
+  });
+  await login(page);
+  for (const width of [1366, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (let index = 0; index < 2; index++)
+      await expect(
+        page.locator("article").nth(index).locator(".channel-color-bar"),
+      ).toHaveCSS("background-color", "rgb(139, 92, 246)");
   }
 });
 

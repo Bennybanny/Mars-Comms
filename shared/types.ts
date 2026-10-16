@@ -1,3 +1,10 @@
+export const GROUP_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+export const DEFAULT_GROUP_COLOR = "#8b5cf6";
+export function groupColor(value: unknown) {
+  return typeof value === "string" && GROUP_COLOR_PATTERN.test(value)
+    ? value
+    : DEFAULT_GROUP_COLOR;
+}
 export type Group = {
   id: string;
   name: string;

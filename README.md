@@ -6,8 +6,8 @@ Local browser intercom for small live production crews, with a native desktop la
 
 Install **Mars Comms** on the server computer. On Windows x64, run the installer or open the portable EXE. **No separate Node.js installation, terminal, browser launcher or Git checkout is required.**
 
-- `release/Mars-Comms-0.2.5-win-x64.exe` — installer with desktop/Start menu shortcuts.
-- `release/Mars-Comms-0.2.5-Windows-Portable.exe` — standalone launcher without installation.
+- `release/Mars-Comms-0.2.6-win-x64.exe` — installer with desktop/Start menu shortcuts.
+- `release/Mars-Comms-0.2.6-Windows-Portable.exe` — standalone launcher without installation.
 
 The portable app still stores persistent data in your user application-data folder, not beside the EXE. Windows binaries are currently unsigned. macOS `.app`/DMG and Linux AppImage packaging are configured for builds on those operating systems; local verification was performed on Windows.
 
@@ -29,6 +29,8 @@ NIC selection and ports are remembered. If the saved NIC disappears or changes I
 Localhost / development is for same-computer checks. Phones cannot connect to another computer's `127.0.0.1`; select Ethernet/Wi-Fi for crew access. Starting the launcher/server never resumes client microphone transmission.
 
 ## Crew certificate setup
+
+Each channel has a 5px top bar in its configured Admin group color. Channel names remain visible; talking, receiving, PTT and Latch feedback remain separate. Color changes arrive through the existing snapshots. Missing/invalid colors use the existing #8b5cf6 default; input validation and rendering share the same six-digit hex rule. The bar occupies no layout height on either desktop or mobile.
 
 The intercom header's **QR** button opens **Connect Device**. Choose **New Device Setup** for the existing setup/trust workflow or **Open Mars Comms** for a device that already trusts the server. Each offers a locally generated QR and **Copy Link**. Addresses come from the launcher's selected LAN interface and configured ports; scanning never logs anyone in or includes credentials. QR codes are shown only in the dialog. No public QR service is used.
 

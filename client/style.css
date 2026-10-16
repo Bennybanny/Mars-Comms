@@ -260,12 +260,23 @@ main {
   gap: 20px;
 }
 .card {
+  position: relative;
+  overflow: hidden;
   min-width: 0;
   background: #1b1b23;
   border: 1px solid #34313e;
   border-radius: 13px;
   padding: 23px;
   transition: border-color 0.1s;
+}
+.channel-color-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: var(--group, #8b5cf6);
+  pointer-events: none;
 }
 .card.transmitting {
   border-color: #a286ef;
@@ -661,10 +672,6 @@ th {
     font-size: 17px;
     letter-spacing: -0.3px;
     margin: 0;
-  }
-  .card h2 .dot {
-    flex-shrink: 0;
-    margin-right: 7px;
   }
   .channel-name {
     overflow: hidden;

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Group, Peer, User } from "../shared/types";
+import { groupColor } from "../shared/types";
 import { api } from "./api";
 import { AudioEngine } from "./AudioEngine";
 import { Communications } from "./Communications";
@@ -343,8 +344,11 @@ function App() {
                           : "")
                     }
                     key={g.id}
-                    style={{ "--group": g.color } as React.CSSProperties}
+                    style={
+                      { "--group": groupColor(g.color) } as React.CSSProperties
+                    }
                   >
+                    <span className="channel-color-bar" aria-hidden="true" />
                     <div className="card-heading">
                       <span className="channel-index">
                         CH {String(index + 1).padStart(2, "0")}
@@ -358,7 +362,6 @@ function App() {
                       </span>
                     </div>
                     <h2 title={g.name}>
-                      <span className="dot" style={{ background: g.color }} />
                       <span className="channel-name">{g.name}</span>
                     </h2>
                     <div

@@ -7,6 +7,12 @@ import { connectionInfo } from "../shared/connection.js";
 const directory = mkdtempSync(join(tmpdir(), "mars-browser-"));
 const store = new Store(join(directory, "mars.sqlite"));
 const groups = store.groups();
+// Distinct fixture colors are configured values, never group-name rules.
+for (const [index, group] of groups.entries())
+  store.saveGroup(group.id, {
+    ...group,
+    color: ["#2563eb", "#8b5cf6", "#dc2626", "#16a34a"][index],
+  });
 for (const username of [
   "camera",
   "receiver",
