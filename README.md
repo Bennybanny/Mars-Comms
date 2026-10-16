@@ -6,8 +6,8 @@ Local browser intercom for small live production crews, with a native desktop la
 
 Install **Mars Comms** on the server computer. On Windows x64, run the installer or open the portable EXE. **No separate Node.js installation, terminal, browser launcher or Git checkout is required.**
 
-- `release/Mars-Comms-0.2.3-win-x64.exe` — installer with desktop/Start menu shortcuts.
-- `release/Mars-Comms-0.2.3-Windows-Portable.exe` — standalone launcher without installation.
+- `release/Mars-Comms-0.2.4-win-x64.exe` — installer with desktop/Start menu shortcuts.
+- `release/Mars-Comms-0.2.4-Windows-Portable.exe` — standalone launcher without installation.
 
 The portable app still stores persistent data in your user application-data folder, not beside the EXE. Windows binaries are currently unsigned. macOS `.app`/DMG and Linux AppImage packaging are configured for builds on those operating systems; local verification was performed on Windows.
 
@@ -74,7 +74,7 @@ Press **Enable Microphone** after login, including at listen-only stations. Each
 
 All transmission stops on uncertain disconnect/reconnect, hidden page, window blur or page exit. Latch never resumes automatically. Keep phone pages visible and screens awake. Audio settings replace the microphone without logout and select speakers where supported; otherwise system/browser routing is explained. Admin mic level is digital gain 0–150%, not hardware gain. Echo cancellation, noise suppression and automatic gain control default on.
 
-Listen preferences are remembered locally per user. A source talking into several heard groups is played once at the maximum overlapping volume. Use **Resume audio** if playback was blocked. Device loss displays an error and stops talk. Dead peers disappear after heartbeat timeout. Current desktop Chrome/Edge/Firefox and mobile Safari/Chrome are targets; actual hardware/browser combinations still need testing.
+Listen preferences are remembered locally per user. A source talking into several heard groups is played once at the maximum overlapping volume. Use **Resume audio** if playback was blocked. Device loss displays an error and stops talk. The server removes disconnected peers and their talk/listen state centrally and broadcasts the corrected presence. Clean disconnects clear immediately when detected. The server checks transport pongs and application activity every second, with a five-second deadline for each (normally removal within five to six seconds of the last qualifying response). The application sends a heartbeat every two seconds, so even a frozen page whose browser still answers WebSocket pings cannot hold a stale talk latch. Reconnect always starts with PTT/Latch OFF. Other devices using the same account remain connected. Reload crew browser pages after updating the server. Current desktop Chrome/Edge/Firefox and mobile Safari/Chrome are targets; actual hardware/browser combinations still need testing.
 
 ## Data and migration
 

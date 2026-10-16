@@ -16,6 +16,7 @@ export type User = {
 };
 export type Peer = { id: string; user: User; talk: string[]; listen: string[] };
 export type ClientMessage =
+  | { type: "heartbeat" }
   | { type: "state"; talk: string[]; listen: string[] }
   | {
       type: "signal";

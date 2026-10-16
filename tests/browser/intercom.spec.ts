@@ -194,6 +194,9 @@ test("two browsers exchange real RTP audio; PTT, latch, listen, gain and reconne
     await expect(
       camera.getByRole("button", { name: "Latch to talk" }),
     ).toHaveAttribute("aria-pressed", "false", { timeout: 15000 });
+    await expect(receiver.locator(".speakers")).toHaveText("", {
+      timeout: 7000,
+    });
     await a.setOffline(false);
     await expect(p.locator(".connection")).toContainText("CONNECTED", {
       timeout: 15000,
@@ -201,6 +204,31 @@ test("two browsers exchange real RTP audio; PTT, latch, listen, gain and reconne
     await expect(
       camera.getByRole("button", { name: "Latch to talk" }),
     ).toHaveAttribute("aria-pressed", "false");
+    await expect(receiver.locator(".speakers")).toHaveText("");
+    const reconnectEnergy = await energy();
+    await camera.getByRole("button", { name: "Latch to talk" }).click();
+    await expect(receiver.locator(".speakers")).toContainText("camera");
+    await expect
+      .poll(async () => (await energy()) - reconnectEnergy, { timeout: 15000 })
+      .toBeGreaterThan(0.0001);
+    // Pause JavaScript without firing offline/pagehide or sending talk=false.
+    const session = await a.newCDPSession(p);
+    try {
+      await session.send("Debugger.enable");
+      await session.send("Debugger.pause");
+      await expect(receiver.locator(".speakers")).toHaveText("", {
+        timeout: 7000,
+      });
+    } finally {
+      await session.send("Debugger.resume");
+      await session.detach();
+    }
+    await expect(
+      camera.getByRole("button", { name: "Latch to talk" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await expect(p.locator(".connection")).toHaveText("● CONNECTED", {
+      timeout: 15000,
+    });
   } finally {
     await a.close();
     await b.close();

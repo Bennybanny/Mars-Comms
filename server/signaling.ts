@@ -19,6 +19,7 @@ export function cookieToken(cookie = "") {
   );
 }
 export const messageSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("heartbeat") }),
   z.object({
     type: z.literal("state"),
     talk: z.array(z.string()).max(100),
@@ -43,15 +44,41 @@ export const messageSchema = z.discriminatedUnion("type", [
       .optional(),
   }),
 ]);
+export const HEARTBEAT_INTERVAL_MS = 1000;
+export const PEER_TIMEOUT_MS = 5000;
 export function signaling(server: Server, store: Store) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   const peers = new Map<
     string,
-    { peer: Peer; ws: WebSocket; token: string; alive: boolean }
+    {
+      peer: Peer;
+      ws: WebSocket;
+      token: string;
+      lastPong: number;
+      lastActivity: number;
+    }
   >();
   let shuttingDown = false;
+  // Remove runtime ownership before touching the transport. A close handshake
+  // can stall, and late message/pong/close events must not resurrect this peer.
+  function removePeer(
+    id: string,
+    reason: string,
+    transport: "close" | "terminate" | "none" = "close",
+    notify = true,
+  ) {
+    const entry = peers.get(id);
+    if (!entry) return;
+    peers.delete(id);
+    entry.peer.talk = [];
+    entry.peer.listen = [];
+    if (transport === "terminate") entry.ws.terminate();
+    else if (transport === "close") entry.ws.close(1008, reason);
+    if (notify) broadcast();
+  }
   server.on("upgrade", (req, socket, head) => {
     if (
+      shuttingDown ||
       req.url !== "/signal" ||
       req.headers.origin !==
         `${"encrypted" in req.socket ? "https" : "http"}://${req.headers.host}`
@@ -71,19 +98,25 @@ export function signaling(server: Server, store: Store) {
         peer: { id, user, talk: [], listen: [] } as Peer,
         ws,
         token,
-        alive: true,
+        lastPong: performance.now(),
+        lastActivity: performance.now(),
       };
       peers.set(id, entry);
-      ws.on("pong", () => (entry.alive = true));
+      ws.on("pong", () => {
+        if (peers.get(id) === entry) entry.lastPong = performance.now();
+      });
       ws.on("message", (raw) => {
+        if (peers.get(id) !== entry) return;
         try {
           const m = messageSchema.parse(JSON.parse(raw.toString()));
           const current = store.session(token);
           if (!current) {
-            ws.close(1008);
+            removePeer(id, "Session invalid");
             return;
           }
           entry.peer.user = current;
+          entry.lastActivity = performance.now();
+          if (m.type === "heartbeat") return;
           if (m.type === "state") {
             const talk = sanitizeState(current, store.groups(), m.talk),
               listen = sanitizeState(current, store.groups(), m.listen);
@@ -103,35 +136,42 @@ export function signaling(server: Server, store: Store) {
               target.ws.send(JSON.stringify({ ...m, from: id, to: undefined }));
           }
         } catch {
-          ws.close(1008, "Invalid message");
+          removePeer(id, "Invalid message");
         }
       });
       ws.on("close", () => {
-        peers.delete(id);
-        broadcast();
+        removePeer(id, "Connection closed", "none");
       });
+      ws.on("error", () => removePeer(id, "Connection error", "terminate"));
       broadcast();
     });
   });
   function broadcast() {
     if (shuttingDown) return;
+    const now = performance.now();
+    const groups = store.groups();
     for (const e of peers.values()) {
       // A client can reconnect before the old socket's close event runs.
       // Do not carry a closing socket or its latched talk into that snapshot.
       if (e.ws.readyState !== WebSocket.OPEN) {
-        e.peer.talk = [];
-        peers.delete(e.peer.id);
+        removePeer(e.peer.id, "Connection closing", "none", false);
+        continue;
+      }
+      if (
+        now - e.lastPong >= PEER_TIMEOUT_MS ||
+        now - e.lastActivity >= PEER_TIMEOUT_MS
+      ) {
+        removePeer(e.peer.id, "Heartbeat timeout", "terminate", false);
         continue;
       }
       const user = store.session(e.token);
       if (!user) {
-        e.ws.close(1008);
-        peers.delete(e.peer.id);
+        removePeer(e.peer.id, "Session invalid", "close", false);
         continue;
       }
       e.peer.user = user;
-      e.peer.talk = sanitizeState(user, store.groups(), e.peer.talk);
-      e.peer.listen = sanitizeState(user, store.groups(), e.peer.listen);
+      e.peer.talk = sanitizeState(user, groups, e.peer.talk);
+      e.peer.listen = sanitizeState(user, groups, e.peer.listen);
     }
     for (const e of peers.values())
       if (e.ws.readyState === WebSocket.OPEN)
@@ -140,7 +180,7 @@ export function signaling(server: Server, store: Store) {
             type: "snapshot",
             self: e.peer.id,
             user: e.peer.user,
-            groups: allowedGroups(e.peer.user, store.groups()),
+            groups: allowedGroups(e.peer.user, groups),
             peers: [...peers.values()]
               .map((x) => x.peer)
               .filter((p) => p.id !== e.peer.id && relevant(e.peer, p))
@@ -161,26 +201,22 @@ export function signaling(server: Server, store: Store) {
         );
   }
   const timer = setInterval(() => {
-    for (const e of peers.values()) {
-      if (!e.alive) {
-        e.peer.talk = [];
-        e.ws.terminate();
-        continue;
-      }
-      e.alive = false;
-      e.ws.ping();
-    }
+    // Reconcile and publish removals in this tick, without waiting for close.
     broadcast();
-  }, 5000);
+    for (const e of peers.values()) {
+      e.ws.ping(undefined, undefined, (error) => {
+        if (error) removePeer(e.peer.id, "Ping failed", "terminate");
+      });
+    }
+  }, HEARTBEAT_INTERVAL_MS);
   wss.on("close", () => clearInterval(timer));
   return {
     broadcast,
     close() {
       shuttingDown = true;
       clearInterval(timer);
-      for (const e of peers.values()) {
-        e.peer.talk = [];
-      }
+      for (const id of peers.keys())
+        removePeer(id, "Server stopping", "none", false);
       for (const ws of wss.clients)
         ws.close(1001, "Mars Comms server stopping");
       return new Promise<void>((resolve) => {

@@ -35,6 +35,7 @@ export class Communications {
         Date.now() - this.lastMessage > 12000
       )
         this.offline();
+      else this.send({ type: "heartbeat" });
     }, 2000);
   }
   connect() {
