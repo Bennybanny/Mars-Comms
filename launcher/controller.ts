@@ -6,6 +6,7 @@ import { DatabaseSync, backup } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createApp } from "../server/app.js";
+import { connectionInfo } from "../shared/connection.js";
 import { createBootstrapApp } from "../server/setup.js";
 import { Store } from "../server/store.js";
 import type {
@@ -105,6 +106,7 @@ export class LauncherController extends EventEmitter {
   snapshot(): LauncherSnapshot {
     const interfaces = this.interfaces();
     const running = this.state === "Running";
+    const links = connectionInfo(this.config, this.mdns === "Available");
     return {
       version: this.options.version,
       state: this.state,
@@ -119,11 +121,9 @@ export class LauncherController extends EventEmitter {
       dataDirectory: this.options.dataDirectory,
       ...(running
         ? {
-            url: `https://${this.config.address}:${this.config.port}`,
-            setupUrl: `http://${this.config.address}:${this.config.setupPort}/setup`,
-            ...(this.mdns === "Available"
-              ? { mdnsUrl: `https://MarsComms.local:${this.config.port}` }
-              : {}),
+            url: links.appUrl,
+            setupUrl: links.setupUrl,
+            ...(links.mdnsUrl ? { mdnsUrl: links.mdnsUrl } : {}),
           }
         : {}),
     };
@@ -241,6 +241,8 @@ export class LauncherController extends EventEmitter {
       this.instance = createApp(this.store, this.certificates.leafPaths(), {
         staticRoot: this.options.staticRoot,
         setup,
+        connectionInfo: () =>
+          connectionInfo(this.config, this.mdns === "Available"),
       });
       this.bootstrap = createServer(createBootstrapApp(setup));
       this.bootstrap.on("upgrade", (_req, socket) => socket.destroy());

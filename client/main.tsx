@@ -5,6 +5,7 @@ import { api } from "./api";
 import { AudioEngine } from "./AudioEngine";
 import { Communications } from "./Communications";
 import { Admin } from "./Admin";
+import { ConnectDevice } from "./ConnectDevice";
 import "./style.css";
 type Listening = Record<string, { enabled: boolean; volume: number }>;
 function App() {
@@ -15,6 +16,10 @@ function App() {
     [peers, setPeers] = useState<Peer[]>([]),
     [status, setStatus] = useState("DISCONNECTED"),
     [ready, setReady] = useState(false),
+    [micEnabled, setMicEnabled] = useState(false),
+    [needsResume, setNeedsResume] = useState(false),
+    [menuOpen, setMenuOpen] = useState(false),
+    [connectOpen, setConnectOpen] = useState(false),
     [admin, setAdmin] = useState(false),
     [settings, setSettings] = useState(false),
     [devices, setDevices] = useState<MediaDeviceInfo[]>([]),
@@ -54,9 +59,15 @@ function App() {
     const c = new Communications(audio);
     audio.interrupted = () => {
       setReady(false);
-      audio.error(
-        "Audio interrupted. Return to this page and press Resume audio.",
-      );
+      setNeedsResume(true);
+      setLatch([]);
+      setHeld([]);
+      audio.silence();
+      c.state([], c.listen);
+    };
+    audio.recovered = () => {
+      setReady(true);
+      setNeedsResume(false);
     };
     comms.current = c;
     c.onStatus = setStatus;
@@ -88,6 +99,8 @@ function App() {
       comms.current = null;
       engine.current = null;
       setReady(false);
+      setMicEnabled(false);
+      setNeedsResume(false);
     };
   }, [user?.id]);
   useEffect(() => {
@@ -141,10 +154,13 @@ function App() {
       await engine.current?.enable(id);
       engine.current?.setGain(user?.micGain ?? 1);
       setReady(true);
+      setMicEnabled(true);
+      setNeedsResume(false);
       setDevices(await navigator.mediaDevices.enumerateDevices());
       await comms.current?.sync();
     } catch (e) {
       setReady(false);
+      if (engine.current?.capture) setNeedsResume(true);
       setError((e as Error).message);
     }
   }
@@ -223,14 +239,50 @@ function App() {
   const connected = status === "CONNECTED";
   return (
     <>
-      <header>
+      <header className="intercom-header">
         <div className="brand">
           MARS <span>COMMS</span>
         </div>
         <span className={"connection " + (connected ? "online" : "offline")}>
           ● {status}
         </span>
-        <div className="header-actions">
+        <span
+          className={"crew-count " + (connected ? "online" : "offline")}
+          aria-label={`${peers.length + 1} crew online`}
+          title={status}
+        >
+          <span aria-hidden="true">●</span> {peers.length + 1}
+          <span className="crew-label"> online</span>
+        </span>
+        {needsResume && (
+          <button
+            className="primary resume-audio"
+            onClick={() => void enable(mic || undefined)}
+            title="Audio is paused or playback is blocked. Tap to resume."
+          >
+            Resume audio
+          </button>
+        )}
+        <button
+          className="qr-access"
+          aria-label="Connect Device QR"
+          onClick={() => setConnectOpen(true)}
+        >
+          QR
+        </button>
+        <button
+          className="menu-toggle"
+          aria-label="Application menu"
+          aria-expanded={menuOpen}
+          aria-controls="header-actions"
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          ☰
+        </button>
+        <div
+          id="header-actions"
+          className={"header-actions" + (menuOpen ? " open" : "")}
+        >
           <button onClick={() => setSettings(true)}>Audio settings</button>
           {user.admin && (
             <button
@@ -244,7 +296,8 @@ function App() {
           <button onClick={() => void logout()}>Sign out</button>
         </div>
       </header>
-      <main>
+      {connectOpen && <ConnectDevice onClose={() => setConnectOpen(false)} />}
+      <main className="intercom-main">
         {user.defaultPassword && (
           <div className="warning">
             Default admin password is still active.{" "}
@@ -263,35 +316,17 @@ function App() {
           <Admin onClose={() => setAdmin(false)} onError={setError} />
         ) : (
           <>
-            <div className="section-heading">
-              <div>
-                <div className="eyebrow">LIVE PRODUCTION / INTERCOM</div>
-                <h1>Your comms. Ready on cue.</h1>
-                <p className="muted">
-                  Listen in. Hold to talk. Stay connected.
-                </p>
+            {!micEnabled && !needsResume && (
+              <div className="audio-bar">
+                <span>Enable your microphone to join audio</span>
+                <button
+                  className="primary"
+                  onClick={() => void enable(mic || undefined)}
+                >
+                  Enable Microphone
+                </button>
               </div>
-              <div className="crew-count">
-                <strong>{peers.length + 1}</strong>
-                <span>crew online</span>
-              </div>
-            </div>
-            <div className="audio-bar">
-              <span>
-                <span className={"dot " + (ready ? "green" : "")} />
-                {ready
-                  ? "Microphone enabled · use a headset"
-                  : "Enable your microphone to join audio"}
-              </span>
-              <button
-                className="primary"
-                onClick={() => void enable(mic || undefined)}
-              >
-                {ready || engine.current?.capture
-                  ? "Resume audio"
-                  : "Enable Microphone"}
-              </button>
-            </div>
+            )}
             <div className="cards">
               {groups.map((g, index) => {
                 const active = talking.includes(g.id) && connected;
@@ -322,11 +357,18 @@ function App() {
                             : "STANDBY"}
                       </span>
                     </div>
-                    <h2>
+                    <h2 title={g.name}>
                       <span className="dot" style={{ background: g.color }} />
-                      {g.name}
+                      <span className="channel-name">{g.name}</span>
                     </h2>
-                    <div className="speakers" aria-live="polite">
+                    <div
+                      className="speakers"
+                      aria-live="polite"
+                      title={[
+                        ...(active ? ["You"] : []),
+                        ...speakers.map((p) => p.user.displayName),
+                      ].join(" · ")}
+                    >
                       {active ? "You" + (speakers.length ? " · " : "") : ""}
                       {speakers.map((p) => p.user.displayName).join(" · ")}
                     </div>
@@ -387,6 +429,7 @@ function App() {
                         "latch " + (latch.includes(g.id) ? "selected" : "")
                       }
                       aria-pressed={latch.includes(g.id)}
+                      aria-label="Latch to talk"
                       disabled={!ready || !connected}
                       onClick={() =>
                         setLatch((p) =>
@@ -396,11 +439,13 @@ function App() {
                         )
                       }
                     >
-                      Latch to talk{" "}
+                      <span>
+                        Latch<span className="desktop-label"> to talk</span>
+                      </span>{" "}
                       <span>{latch.includes(g.id) ? "ON" : "OFF"}</span>
                     </button>
                     <label className="volume">
-                      Listen volume{" "}
+                      <span className="volume-label">Listen volume</span>{" "}
                       <output>{Math.round(l.volume * 100)}%</output>
                       <input
                         aria-label={g.name + " listen volume"}
@@ -427,7 +472,7 @@ function App() {
                 your channels.
               </p>
             )}
-            <footer>
+            <footer className="intercom-footer">
               <span>LAN AUDIO · WEBRTC</span>
               <span>
                 Hold PTT for momentary talk · Latch for hands-free talk

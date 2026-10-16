@@ -154,10 +154,28 @@ test("native launcher generates certificates, exports only public CA, runs HTTPS
       await intercom.getByLabel("Username", { exact: true }).fill("admin");
       await intercom.getByLabel("Password", { exact: true }).fill("admin");
       await intercom.getByRole("button", { name: "Sign in" }).click();
-      await expect(
-        intercom.getByRole("heading", { name: "Your comms. Ready on cue." }),
-      ).toBeVisible();
+      await expect(intercom.locator("header .crew-count")).toBeVisible();
       await expect(intercom.locator(".connection")).toContainText("CONNECTED");
+      await intercom.getByRole("button", { name: "Connect Device QR" }).click();
+      const connect = intercom.getByRole("dialog", { name: "Connect Device" });
+      await expect(connect.locator(".connect-link")).toHaveAttribute(
+        "href",
+        `http://127.0.0.1:${setupPort}/setup`,
+      );
+      await expect(connect.getByRole("img")).toHaveAttribute(
+        "src",
+        /^data:image\/png;base64,/,
+      );
+      await connect
+        .getByRole("button", { name: "Open Mars Comms", exact: true })
+        .click();
+      await expect(connect.locator(".connect-link")).toHaveAttribute(
+        "href",
+        `https://127.0.0.1:${port}`,
+      );
+      await connect
+        .getByRole("button", { name: "Close Connect Device" })
+        .click();
       expect(clientErrors).toEqual([]);
     } finally {
       await client.close();

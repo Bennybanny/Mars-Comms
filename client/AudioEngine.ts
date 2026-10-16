@@ -19,6 +19,19 @@ export class AudioEngine {
   >();
   error: (message: string) => void = () => {};
   interrupted: () => void = () => {};
+  recovered: () => void = () => {};
+  private reportRecovery() {
+    if (
+      this.context?.state === "running" &&
+      this.capture
+        ?.getAudioTracks()
+        .some((track) => track.readyState === "live" && !track.muted) &&
+      [...this.peers.values()].every(
+        (peer) => !peer.audio.srcObject || !peer.audio.paused,
+      )
+    )
+      this.recovered();
+  }
   get ready() {
     return !!this.capture
       ?.getAudioTracks()
@@ -36,7 +49,7 @@ export class AudioEngine {
       if (this.capture && this.context?.state !== "running") {
         this.silence();
         this.interrupted();
-      }
+      } else this.reportRecovery();
     };
     const playback = Promise.all([
       this.context.resume(),
@@ -72,6 +85,7 @@ export class AudioEngine {
         this.silence();
         this.interrupted();
       };
+      track.onunmute = () => this.reportRecovery();
     } catch (e) {
       capture.getTracks().forEach((t) => t.stop());
       throw e;
@@ -92,6 +106,10 @@ export class AudioEngine {
       const audio = document.createElement("audio") as SinkAudio;
       audio.autoplay = true;
       audio.setAttribute("playsinline", "");
+      audio.addEventListener("pause", () => {
+        if (audio.srcObject && this.capture) this.interrupted();
+      });
+      audio.addEventListener("playing", () => this.reportRecovery());
       document.body.append(audio);
       p = { gate, destination, audio };
       this.peers.set(id, p);
@@ -106,11 +124,8 @@ export class AudioEngine {
       p.audio.srcObject = stream;
       void p.audio
         .play()
-        .catch(() =>
-          this.error(
-            "Playback blocked. Press Enable Microphone to resume audio.",
-          ),
-        );
+        .then(() => this.reportRecovery())
+        .catch(() => this.interrupted());
     }
   }
   update(peers: Peer[], talk: string[], listen: Record<string, number>) {
@@ -143,10 +158,12 @@ export class AudioEngine {
       p.audio.srcObject = null;
       p.audio.remove();
       this.peers.delete(id);
+      this.reportRecovery();
     }
   }
   dispose() {
     this.interrupted = () => {};
+    this.recovered = () => {};
     if (this.context) this.context.onstatechange = null;
     for (const id of this.peers.keys()) this.remove(id);
     this.capture?.getTracks().forEach((t) => t.stop());

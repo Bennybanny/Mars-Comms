@@ -6,10 +6,16 @@ import { readFileSync } from "node:fs";
 import { Store } from "./store.js";
 import { cookieToken, signaling } from "./signaling.js";
 import { setupRoutes, type SetupOptions } from "./setup.js";
+import QRCode from "qrcode";
+import type { ConnectionInfo } from "../shared/connection.js";
 export function createApp(
   store: Store,
   tls?: { cert: string; key: string },
-  options: { staticRoot?: string; setup?: SetupOptions } = {},
+  options: {
+    staticRoot?: string;
+    setup?: SetupOptions;
+    connectionInfo?: () => ConnectionInfo;
+  } = {},
 ) {
   const app = express();
   app.disable("x-powered-by");
@@ -77,6 +83,28 @@ export function createApp(
     next();
   });
   app.get("/api/me", (_req, res) => res.json(res.locals.user));
+  app.get("/api/connection-info", async (_req, res) => {
+    const info = options.connectionInfo?.();
+    if (!info) {
+      res
+        .status(503)
+        .json({
+          error:
+            "Connection details are unavailable. Start Mars Comms with the launcher.",
+        });
+      return;
+    }
+    const qrOptions = {
+      width: 256,
+      margin: 4,
+      errorCorrectionLevel: "M" as const,
+    };
+    const [appQR, setupQR] = await Promise.all([
+      QRCode.toDataURL(info.appUrl, qrOptions),
+      QRCode.toDataURL(info.setupUrl, qrOptions),
+    ]);
+    res.json({ ...info, appQR, setupQR });
+  });
   app.post("/api/logout", (req, res) => {
     store.logout(cookieToken(req.headers.cookie));
     signals.broadcast();

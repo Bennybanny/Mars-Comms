@@ -6,8 +6,8 @@ Local browser intercom for small live production crews, with a native desktop la
 
 Install **Mars Comms** on the server computer. On Windows x64, run the installer or open the portable EXE. **No separate Node.js installation, terminal, browser launcher or Git checkout is required.**
 
-- `release/Mars-Comms-0.2.4-win-x64.exe` — installer with desktop/Start menu shortcuts.
-- `release/Mars-Comms-0.2.4-Windows-Portable.exe` — standalone launcher without installation.
+- `release/Mars-Comms-0.2.5-win-x64.exe` — installer with desktop/Start menu shortcuts.
+- `release/Mars-Comms-0.2.5-Windows-Portable.exe` — standalone launcher without installation.
 
 The portable app still stores persistent data in your user application-data folder, not beside the EXE. Windows binaries are currently unsigned. macOS `.app`/DMG and Linux AppImage packaging are configured for builds on those operating systems; local verification was performed on Windows.
 
@@ -29,6 +29,10 @@ NIC selection and ports are remembered. If the saved NIC disappears or changes I
 Localhost / development is for same-computer checks. Phones cannot connect to another computer's `127.0.0.1`; select Ethernet/Wi-Fi for crew access. Starting the launcher/server never resumes client microphone transmission.
 
 ## Crew certificate setup
+
+The intercom header's **QR** button opens **Connect Device**. Choose **New Device Setup** for the existing setup/trust workflow or **Open Mars Comms** for a device that already trusts the server. Each offers a locally generated QR and **Copy Link**. Addresses come from the launcher's selected LAN interface and configured ports; scanning never logs anyone in or includes credentials. QR codes are shown only in the dialog. No public QR service is used.
+
+The main screen places crew presence in the header and removes its initial microphone prompt after activation. **Resume audio** appears in the header only when capture/context/playback requires recovery and disappears when audio is healthy. Phone cards use compact Listen/volume and Latch/PTT rows with 44px secondary touch targets and 72px PTT buttons. Three channels fit without scrolling at 390×844 and 412×915; additional channels scroll normally. The sticky header, dynamic viewport height and safe-area padding support phone use. Desktop cards retain their original controls and PTT dimensions.
 
 If audio stops after visiting setup, installing a certificate or switching apps on a phone, return to the HTTPS intercom and press **Resume audio**. An interrupted microphone/audio context now clears transmission and disables talk until audio is enabled again. Resume never restores a previous talk latch; press PTT or Latch deliberately afterward. Downloading the public CA does not change the server certificate or audio configuration.
 

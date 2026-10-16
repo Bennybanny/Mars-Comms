@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { peerIdentity, enableInPeerOrder } from "./media-fixture";
 async function login(page: Page, username: string) {
   await page.goto("/");
   await page.getByLabel("Username", { exact: true }).fill(username);
@@ -22,6 +23,10 @@ test("two browsers exchange real RTP audio; PTT, latch, listen, gain and reconne
   const p = await a.newPage(),
     q = await b.newPage(),
     r = await c.newPage();
+  const identities = [p, q, r].map((page) => ({
+    page,
+    identity: peerIdentity(page),
+  }));
   for (const page of [p, q, r])
     await page.addInitScript(() => {
       const Original = window.RTCPeerConnection;
@@ -44,15 +49,7 @@ test("two browsers exchange real RTP audio; PTT, latch, listen, gain and reconne
     await login(p, "camera");
     await login(q, "receiver");
     await login(r, "tech");
-    await p
-      .getByRole("button", { name: "Enable Microphone", exact: true })
-      .click();
-    await q
-      .getByRole("button", { name: "Enable Microphone", exact: true })
-      .click();
-    await r
-      .getByRole("button", { name: "Enable Microphone", exact: true })
-      .click();
+    await enableInPeerOrder(identities);
     await expect
       .poll(() =>
         p.evaluate(() =>
@@ -154,12 +151,17 @@ test("two browsers exchange real RTP audio; PTT, latch, listen, gain and reconne
       .toBeGreaterThan(0.0001);
     // Browser interruptions must clear transmission and expose a working recovery.
     await p.evaluate(() => (window as any).audioContext.suspend());
-    await expect(p.getByRole("alert")).toContainText("Audio interrupted");
+    await expect(
+      p.locator("header").getByRole("button", { name: "Resume audio" }),
+    ).toBeVisible();
     await expect(
       camera.getByRole("button", { name: /PUSH TO TALK/ }),
     ).toBeDisabled();
     await expect(receiver.locator(".speakers")).toHaveText("");
     await p.getByRole("button", { name: "Resume audio", exact: true }).click();
+    await expect(
+      p.getByRole("button", { name: "Resume audio", exact: true }),
+    ).toHaveCount(0);
     await expect(
       camera.getByRole("button", { name: /PUSH TO TALK/ }),
     ).toBeEnabled();
@@ -290,7 +292,7 @@ test("membership isolation and responsive layouts", async ({ page }) => {
     const box = await card(page, "Tech")
       .getByRole("button", { name: /PUSH TO TALK/ })
       .boundingBox();
-    expect(box!.height).toBeGreaterThanOrEqual(140);
+    expect(box!.height).toBeGreaterThanOrEqual(width <= 600 ? 72 : 140);
     await page.screenshot({
       path: `test-results/layout-${width}.png`,
       fullPage: true,
