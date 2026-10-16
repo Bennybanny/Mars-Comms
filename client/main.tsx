@@ -49,8 +49,15 @@ function App() {
       setLatch([]);
       setHeld([]);
       audio.silence();
+      c.state([], c.listen);
     };
     const c = new Communications(audio);
+    audio.interrupted = () => {
+      setReady(false);
+      audio.error(
+        "Audio interrupted. Return to this page and press Resume audio.",
+      );
+    };
     comms.current = c;
     c.onStatus = setStatus;
     c.onReset = () => {
@@ -128,12 +135,16 @@ function App() {
   async function enable(id?: string) {
     try {
       setError("");
+      setLatch([]);
+      setHeld([]);
+      comms.current?.state([], comms.current.listen);
       await engine.current?.enable(id);
       engine.current?.setGain(user?.micGain ?? 1);
       setReady(true);
       setDevices(await navigator.mediaDevices.enumerateDevices());
       await comms.current?.sync();
     } catch (e) {
+      setReady(false);
       setError((e as Error).message);
     }
   }
@@ -276,7 +287,9 @@ function App() {
                 className="primary"
                 onClick={() => void enable(mic || undefined)}
               >
-                {ready ? "Resume audio" : "Enable Microphone"}
+                {ready || engine.current?.capture
+                  ? "Resume audio"
+                  : "Enable Microphone"}
               </button>
             </div>
             <div className="cards">

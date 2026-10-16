@@ -6,8 +6,8 @@ Local browser intercom for small live production crews, with a native desktop la
 
 Install **Mars Comms** on the server computer. On Windows x64, run the installer or open the portable EXE. **No separate Node.js installation, terminal, browser launcher or Git checkout is required.**
 
-- `release/Mars-Comms-0.2.2-win-x64.exe` — installer with desktop/Start menu shortcuts.
-- `release/Mars-Comms-0.2.2-Windows-Portable.exe` — standalone launcher without installation.
+- `release/Mars-Comms-0.2.3-win-x64.exe` — installer with desktop/Start menu shortcuts.
+- `release/Mars-Comms-0.2.3-Windows-Portable.exe` — standalone launcher without installation.
 
 The portable app still stores persistent data in your user application-data folder, not beside the EXE. Windows binaries are currently unsigned. macOS `.app`/DMG and Linux AppImage packaging are configured for builds on those operating systems; local verification was performed on Windows.
 
@@ -29,6 +29,8 @@ NIC selection and ports are remembered. If the saved NIC disappears or changes I
 Localhost / development is for same-computer checks. Phones cannot connect to another computer's `127.0.0.1`; select Ethernet/Wi-Fi for crew access. Starting the launcher/server never resumes client microphone transmission.
 
 ## Crew certificate setup
+
+If audio stops after visiting setup, installing a certificate or switching apps on a phone, return to the HTTPS intercom and press **Resume audio**. An interrupted microphone/audio context now clears transmission and disables talk until audio is enabled again. Resume never restores a previous talk latch; press PTT or Latch deliberately afterward. Downloading the public CA does not change the server certificate or audio configuration.
 
 Browsers require a secure context for LAN microphone capture. A `.local` hostname does not make HTTP secure. The native launcher therefore starts the actual intercom and authenticated APIs over **HTTPS only**.
 

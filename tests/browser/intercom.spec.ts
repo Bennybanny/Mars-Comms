@@ -32,6 +32,13 @@ test("two browsers exchange real RTP audio; PTT, latch, listen, gain and reconne
           (window as any).connections.push(this);
         }
       };
+      const OriginalAudio = window.AudioContext;
+      window.AudioContext = class extends OriginalAudio {
+        constructor() {
+          super();
+          (window as any).audioContext = this;
+        }
+      };
     });
   try {
     await login(p, "camera");
@@ -144,6 +151,27 @@ test("two browsers exchange real RTP audio; PTT, latch, listen, gain and reconne
     });
     await expect
       .poll(async () => (await energy()) - mutedEnergy, { timeout: 15000 })
+      .toBeGreaterThan(0.0001);
+    // Browser interruptions must clear transmission and expose a working recovery.
+    await p.evaluate(() => (window as any).audioContext.suspend());
+    await expect(p.getByRole("alert")).toContainText("Audio interrupted");
+    await expect(
+      camera.getByRole("button", { name: /PUSH TO TALK/ }),
+    ).toBeDisabled();
+    await expect(receiver.locator(".speakers")).toHaveText("");
+    await p.getByRole("button", { name: "Resume audio", exact: true }).click();
+    await expect(
+      camera.getByRole("button", { name: /PUSH TO TALK/ }),
+    ).toBeEnabled();
+    await expect(
+      camera.getByRole("button", { name: "Latch to talk" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    const interruptedEnergy = await energy();
+    await camera.getByRole("button", { name: "Latch to talk" }).click();
+    await expect
+      .poll(async () => (await energy()) - interruptedEnergy, {
+        timeout: 15000,
+      })
       .toBeGreaterThan(0.0001);
     // Pointer release leaves an already active Camera latch intact.
     const tech = card(p, "Tech").getByRole("button", { name: /PUSH TO TALK/ });

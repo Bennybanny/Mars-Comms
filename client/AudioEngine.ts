@@ -18,14 +18,34 @@ export class AudioEngine {
     }
   >();
   error: (message: string) => void = () => {};
+  interrupted: () => void = () => {};
   get ready() {
-    return !!this.capture;
+    return !!this.capture
+      ?.getAudioTracks()
+      .some((track) => track.readyState === "live");
   }
   async enable(deviceId?: string) {
     if (!navigator.mediaDevices?.getUserMedia)
       throw Error(
         "Microphone requires trusted HTTPS on LAN devices, or localhost. See README.",
       );
+    // Start resume/play directly in the button gesture, before awaiting permission.
+    // Safari can lose that gesture while getUserMedia is pending.
+    this.context ??= new AudioContext();
+    this.context.onstatechange = () => {
+      if (this.capture && this.context?.state !== "running") {
+        this.silence();
+        this.interrupted();
+      }
+    };
+    const playback = Promise.all([
+      this.context.resume(),
+      ...[...this.peers.values()]
+        .filter((peer) => peer.audio.srcObject)
+        .map((peer) => peer.audio.play()),
+    ]);
+    // Attach a handler immediately while the permission prompt may still be open.
+    void playback.catch(() => {});
     const capture = await navigator.mediaDevices.getUserMedia({
       audio: {
         deviceId: deviceId ? { exact: deviceId } : undefined,
@@ -36,21 +56,22 @@ export class AudioEngine {
       video: false,
     });
     try {
-      this.context ??= new AudioContext();
-      await this.context.resume();
+      await playback;
+      if (this.context.state !== "running")
+        throw Error(
+          "Audio is interrupted. Return to this page and press Resume audio.",
+        );
       this.gain ??= this.context.createGain();
       this.source?.disconnect();
       this.capture?.getTracks().forEach((t) => t.stop());
       this.capture = capture;
       this.source = this.context.createMediaStreamSource(capture);
       this.source.connect(this.gain);
-      for (const peer of this.peers.values()) {
-        if (peer.audio.srcObject) await peer.audio.play();
-      }
-      capture.getAudioTracks()[0].onended = () =>
-        this.error(
-          "Microphone disconnected. Stop talking and enable another microphone.",
-        );
+      const track = capture.getAudioTracks()[0];
+      track.onmute = track.onended = () => {
+        this.silence();
+        this.interrupted();
+      };
     } catch (e) {
       capture.getTracks().forEach((t) => t.stop());
       throw e;
@@ -125,6 +146,8 @@ export class AudioEngine {
     }
   }
   dispose() {
+    this.interrupted = () => {};
+    if (this.context) this.context.onstatechange = null;
     for (const id of this.peers.keys()) this.remove(id);
     this.capture?.getTracks().forEach((t) => t.stop());
     void this.context?.close();
